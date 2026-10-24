@@ -50,7 +50,7 @@ enum OpenRouterModelsAPI {
         var request = URLRequest(url: URL(string: URLBuilding.join(baseURL, path))!)
         request.httpMethod = "GET"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("https://github.com/OpenMinis/OpenMinis", forHTTPHeaderField: "HTTP-Referer")
+        request.setValue("https://github.com/AlexLcx/lowhub", forHTTPHeaderField: "HTTP-Referer")
         request.setValue("Minis App", forHTTPHeaderField: "X-Title")
         logger.info("Fetching OpenRouter models \(path)")
 
@@ -187,7 +187,7 @@ private enum OpenRouterModelsCache {
             // speech / transcription catalogs were merged in hold no voice
             // models and no voiceRole, and would otherwise be served for up to
             // 7 more days — the fix would look like it did nothing.
-            .appendingPathComponent("com.openminis.app.openrouter-models-cache-v2", isDirectory: true)
+            .appendingPathComponent("com.lowhub.app.openrouter-models-cache-v2", isDirectory: true)
     }
 
     private static func cacheKey(for credential: String) -> String {

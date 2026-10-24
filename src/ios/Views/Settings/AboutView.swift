@@ -125,7 +125,7 @@ struct AboutView: View {
                         Image(systemName: "link.circle.fill")
                     }
                 }
-                Link(destination: URL(string: "https://github.com/OpenMinis/OpenMinis/issues")!) {
+                Link(destination: URL(string: "https://github.com/AlexLcx/lowhub/issues")!) {
                     Label {
                         HStack {
                             Text("Report an Issue")

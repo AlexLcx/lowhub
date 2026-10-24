@@ -11,7 +11,7 @@
   What helps instead:
 
     • Bugs and feature requests → open an issue
-      https://github.com/OpenMinis/OpenMinis/issues
+      https://github.com/AlexLcx/lowhub/issues
 
     • Use cases and workflows   → OpenMinis/AwesomeMinis  (accepts PRs)
     • Skills                    → OpenMinis/MinisSkills   (accepts PRs)

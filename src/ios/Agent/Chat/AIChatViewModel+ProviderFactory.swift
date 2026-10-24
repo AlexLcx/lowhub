@@ -250,7 +250,7 @@ extension AIChatViewModel {
             }
             let orProvider = OpenAIProvider(apiKey: key, model: entry.model, customBaseURL: customBase ?? "https://openrouter.ai/api", appendV1Suffix: customBase == nil)
             orProvider.extraHeaders = [
-                "HTTP-Referer": "https://github.com/OpenMinis/OpenMinis",
+                "HTTP-Referer": "https://github.com/AlexLcx/lowhub",
                 "X-Title": "Minis App",
             ]
             orProvider.useOpenRouterCompat = true

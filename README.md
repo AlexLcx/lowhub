@@ -1,11 +1,15 @@
-# OpenMinis
+# lowhub
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![Platforms](https://img.shields.io/badge/Platforms-iOS%20%7C%20Android-lightgrey.svg)](#beta-programme)
 
+> **关于本仓库**：lowhub 是 [OpenMinis](https://github.com/OpenMinis/OpenMinis) 的个人
+> fork（GPL-3.0），已更名为 lowhub、应用包名改为 `com.lowhub.app`，可与原版并存安装。
+> 下文的官网（openminis.app）与 App Store 链接仍指向原项目。
+
 **Your private, on-device AI agent.**
 
-OpenMinis brings leading models — Claude, GPT, Gemini and more — into a native
+lowhub brings leading models — Claude, GPT, Gemini and more — into a native
 mobile experience, and gives them a real computer to work with: a full Linux
 shell running on your device, browser automation, extensible skills, persistent
 memory, and deep system integration.
@@ -23,11 +27,11 @@ Official website: **[openminis.app](https://openminis.app)**
   <img alt="Download on the App Store" height="48" src="assets/badge-appstore.svg" />
 </a>
 &nbsp;
-<a href="https://github.com/OpenMinis/OpenMinis/releases">
+<a href="https://github.com/AlexLcx/lowhub/releases">
   <img alt="Get the APK on GitHub" height="48" src="assets/badge-android.svg" />
 </a>
 
-![Minis on iOS — deep research, chat, agent runtime, integrations, iCloud sync and granular permissions](assets/screenshots.png)
+![lowhub on iOS — deep research, chat, agent runtime, integrations, iCloud sync and granular permissions](assets/screenshots.png)
 
 ---
 
@@ -45,22 +49,22 @@ Official website: **[openminis.app](https://openminis.app)**
 
 ---
 
-## What you can do with Minis
+## What you can do with lowhub
 
 A few things people actually use it for:
 
-- **Photograph a meal, log the nutrition** — Minis identifies the dishes, estimates
+- **Photograph a meal, log the nutrition** — lowhub identifies the dishes, estimates
   calories and macros, and writes them to Apple Health.
-- **Wake up to your timeline** — Shortcuts triggers Minis to fetch your X timeline,
+- **Wake up to your timeline** — Shortcuts triggers lowhub to fetch your X timeline,
   summarise it, synthesise speech, and play it as your alarm.
 - **Turn group chatter into tasks** — pull messages from a Telegram group, extract
   bugs and action items, deduplicate them, and file them into Apple Reminders.
 - **Mount your Obsidian vault** — research, clean up and write Markdown notes back
   into the vault as a normal workspace.
-- **Share anything into a calendar event** — send a page or message to Minis via the
+- **Share anything into a calendar event** — send a page or message to lowhub via the
   iOS Share Sheet and it creates the event, time and place included.
 
-**→ [OpenMinis/AwesomeMinis](https://github.com/OpenMinis/AwesomeMinis)** — a curated,
+**→ [lowhub/AwesomeMinis](https://github.com/lowhub/AwesomeMinis)** — a curated,
 community-contributed collection of use cases and workflows across health,
 productivity, research, finance and developer tooling.
 
@@ -73,13 +77,13 @@ references and assets — that the agent loads on demand when a request matches 
 Metadata stays in context for triggering; the body and bundled resources load only
 when the skill is actually used.
 
-Minis has its own tool system, but it does not require skills written specifically
+lowhub has its own tool system, but it does not require skills written specifically
 for it: **skills built for Claude, Codex, OpenClaw or Hermes Agent generally run in
-Minis as-is.** Skills that have been adapted to Minis' tools simply run better —
+lowhub as-is.** Skills that have been adapted to lowhub' tools simply run better —
 they can reach the Linux shell, device integrations and native offloads directly.
 
-**→ [OpenMinis/MinisSkills](https://github.com/OpenMinis/MinisSkills)** — skills
-adapted for Minis alongside ones built for it from scratch, covering TTS, search,
+**→ [lowhub/MinisSkills](https://github.com/lowhub/MinisSkills)** — skills
+adapted for lowhub alongside ones built for it from scratch, covering TTS, search,
 media downloads, health analysis, cloud APIs and more.
 
 ---
@@ -88,17 +92,17 @@ media downloads, health analysis, cloud APIs and more.
 
 > "the most impressive indie app I've seen in a while"
 >
-> — Federico Viticci, [**Open Minis Is the iOS Agent I Wish Siri AI Could Be**](https://www.macstories.net/reviews/open-minis-is-the-ios-agent-i-wish-siri-ai-could-be/),
+> — Federico Viticci, [**Open lowhub Is the iOS Agent I Wish Siri AI Could Be**](https://www.macstories.net/reviews/open-minis-is-the-ios-agent-i-wish-siri-ai-could-be/),
 > MacStories (July 2026)
 
 > "在很大程度上实现甚至局部超越了 Apple Intelligence"
 >
-> — Ye Han, [**这可能是 iPhone 最强 Agent 软件，没有之一 丨Open Minis 入门指南**](https://zhuanlan.zhihu.com/p/2045570157783807562),
+> — Ye Han, [**这可能是 iPhone 最强 Agent 软件，没有之一 丨Open lowhub 入门指南**](https://zhuanlan.zhihu.com/p/2045570157783807562),
 > 知乎 / Zhihu (June 2026)
 
 > "可能是 iOS 端最强 AI Agent"
 >
-> — [**Open Minis：可能是 iOS 端最强 AI Agent**](https://www.appinn.com/open-minis/),
+> — [**Open lowhub：可能是 iOS 端最强 AI Agent**](https://www.appinn.com/open-minis/),
 > 小众软件 / Appinn (March 2026)
 
 ---
@@ -111,14 +115,14 @@ and new features land first.
 
 **→ [Join the TestFlight beta](https://testflight.apple.com/join/3BdkA5c3)**
 
-On Android, the [releases page](https://github.com/OpenMinis/OpenMinis/releases)
+On Android, the [releases page](https://github.com/AlexLcx/lowhub/releases)
 always carries the latest APK.
 
 ---
 
 ## Building from source
 
-Minis ships a Linux sandbox inside the app, so the native dependencies (iSH on
+lowhub ships a Linux sandbox inside the app, so the native dependencies (iSH on
 iOS, PRoot on Android, FFmpeg, LAME, rclone) and the Alpine rootfs are **built
 from source** rather than committed as binaries.
 
@@ -127,8 +131,8 @@ from source** rather than committed as binaries.
 The short version:
 
 ```sh
-git clone --recurse-submodules https://github.com/OpenMinis/OpenMinis.git
-cd OpenMinis
+git clone --recurse-submodules https://github.com/AlexLcx/lowhub.git
+cd lowhub
 
 # iOS  — needs Go 1.25+ and Xcode's Metal Toolchain
 #        (xcodebuild -downloadComponent MetalToolchain)
@@ -136,7 +140,7 @@ cd OpenMinis
 ./deps/build_lame.sh && ./deps/build_ffmpeg.sh
 ./deps/build_ish.sh && ./deps/prepare_alpine_rootfs.sh
 ./deps/build_rclone_ios.sh
-open src/ios/Minis.xcodeproj
+open src/ios/lowhub.xcodeproj
 
 # Android — needs NDK r28+, Go 1.25+ and gomobile
 ./deps/build_proot.sh && ./scripts/prepare_android_sandbox.sh
@@ -166,16 +170,16 @@ scripts/          Rootfs preparation and developer tooling
 
 ## Acknowledgements
 
-OpenMinis stands on a great deal of open-source work. Our thanks to the
+lowhub stands on a great deal of open-source work. Our thanks to the
 maintainers of these projects — the full inventory, with versions and license
 terms, is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
 **The sandbox** — the heart of the product:
 
 - **[iSH](https://github.com/ish-app/ish)** (GPLv3) — Linux usermode emulation on
-  iOS. We run [an ARM64 fork](https://github.com/OpenMinis/ish-arm64).
+  iOS. We run [an ARM64 fork](https://github.com/lowhub/ish-arm64).
 - **[PRoot](https://github.com/termux/proot)** (GPLv2) — user-space chroot for the
-  Android sandbox, via [our fork](https://github.com/OpenMinis/proot);
+  Android sandbox, via [our fork](https://github.com/lowhub/proot);
   **[talloc](https://talloc.samba.org)** (LGPLv3+) underpins it.
 - **[Alpine Linux](https://alpinelinux.org)** — the minirootfs the sandbox boots.
 
@@ -200,10 +204,10 @@ Apple / Swift Server Workgroup packages (Apache-2.0).
 
 ## License
 
-OpenMinis is licensed under the **[GNU General Public License v3.0](LICENSE)**.
+lowhub is licensed under the **[GNU General Public License v3.0](LICENSE)**.
 
-The app links GPL-licensed components — [iSH](https://github.com/OpenMinis/ish-arm64)
-(GPLv3) and [PRoot](https://github.com/OpenMinis/proot) (GPLv2) — so the combined
+The app links GPL-licensed components — [iSH](https://github.com/lowhub/ish-arm64)
+(GPLv3) and [PRoot](https://github.com/lowhub/proot) (GPLv2) — so the combined
 work is distributed under GPLv3. Bundled third-party licenses are listed in
 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
 
@@ -213,10 +217,10 @@ work is distributed under GPLv3. Bundled third-party licenses are listed in
 
 - **Telegram**: [Join the group](https://t.me/+2NzhOJuzRyI1YmM1)
 - **Issues**: Bug reports, feature requests and discussion via
-  [GitHub Issues](https://github.com/OpenMinis/OpenMinis/issues)
+  [GitHub Issues](https://github.com/AlexLcx/lowhub/issues)
 
 This repository is a mirror of a private development tree, so it **does not
 accept pull requests** — there is nowhere for them to land. Issues are the way
-to shape the product, and [AwesomeMinis](https://github.com/OpenMinis/AwesomeMinis)
-and [MinisSkills](https://github.com/OpenMinis/MinisSkills) both do take
+to shape the product, and [AwesomeMinis](https://github.com/lowhub/AwesomeMinis)
+and [MinisSkills](https://github.com/lowhub/MinisSkills) both do take
 contributions. See [CONTRIBUTING.md](CONTRIBUTING.md).
