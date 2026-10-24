@@ -2693,6 +2693,34 @@ class ChatViewModel(
     @Volatile
     private var tavernConfigLoaded = false
 
+    // [T-writing-controls] This session's creative-writing settings
+    // (novel craft / reply length / prose style / sampling overrides),
+    // persisted as a side file (WritingStore), never Room. Stays
+    // [WritingStore.DEFAULT] until the user changes something in the
+    // writing panel or a stored file loads; [writingSettingsDirty] is
+    // what separates "user touched this" from "factory defaults" —
+    // buildSystemPrompt injects NOTHING and the request parameters stay
+    // untouched until it flips, so a plain untouched session produces
+    // byte-identical prompts and requests.
+    private val _writingSettings =
+        MutableStateFlow<com.lowhub.app.agent.WritingSettings>(
+            com.lowhub.app.agent.WritingStore.DEFAULT,
+        )
+    val writingSettings: StateFlow<com.lowhub.app.agent.WritingSettings> =
+        _writingSettings.asStateFlow()
+
+    // Same one-shot lazy-load guard as tavernConfigLoaded: an update
+    // from the panel may land before loadSession's read finishes.
+    @Volatile
+    private var writingSettingsLoaded = false
+
+    @Volatile
+    private var writingSettingsDirty = false
+
+    // In-flight persist for updateWritingSettings; coalesces bursts
+    // (chip taps, slider lifts) so a draft is materialised at most once.
+    private var writingPersistJob: kotlinx.coroutines.Job? = null
+
     /**
      * [T-android-usage-capsule-style] Message ids whose token-usage capsule is
      * revealed. Default empty: the capsule is an easter egg, not a permanent
@@ -6071,6 +6099,30 @@ class ChatViewModel(
     }
 
     /**
+     * [T-writing-controls] Apply new writing settings from the writing
+     * panel. The in-memory state flips immediately (the next turn's
+     * prompt and request parameters read it); persistence materialises
+     * a draft first — same contract as [applyTavernConfig] — so the
+     * side file is keyed by the REAL session id. Bursts coalesce into
+     * the in-flight persist job, which reads the CURRENT value at
+     * write time, so a change that lands mid-materialisation is not
+     * lost under the snapshot that triggered the job.
+     */
+    fun updateWritingSettings(settings: com.lowhub.app.agent.WritingSettings) {
+        _writingSettings.value = settings
+        writingSettingsDirty = true
+        writingSettingsLoaded = true
+        if (writingPersistJob?.isActive == true) return
+        writingPersistJob = viewModelScope.launch {
+            val sid = ensureSession()
+            val latest = _writingSettings.value
+            withContext(Dispatchers.IO) {
+                com.lowhub.app.agent.WritingStore.save(context, sid, latest)
+            }
+        }
+    }
+
+    /**
      * [T-tavern-mode] Turn tavern mode off for this session: drop the
      * snapshot file and the in-memory state. Messages (including an
      * already-inserted opening line) are conversation history and stay.
@@ -6309,6 +6361,21 @@ class ChatViewModel(
                 tavernConfigLoaded = true
                 _tavernConfig.value = withContext(Dispatchers.IO) {
                     com.lowhub.app.agent.TavernStore.loadSessionConfig(context, sessionId)
+                }
+            }
+            // [T-writing-controls] Lazy-load this session's writing
+            // settings (side file). A stored file's EXISTENCE is the
+            // "user touched this" marker — it flips the dirty flag so
+            // the prompt section and request parameters engage; no
+            // file means the session behaves exactly as before.
+            if (!writingSettingsLoaded) {
+                writingSettingsLoaded = true
+                val storedWriting = withContext(Dispatchers.IO) {
+                    com.lowhub.app.agent.WritingStore.load(context, sessionId)
+                }
+                if (storedWriting != null) {
+                    writingSettingsDirty = true
+                    _writingSettings.value = storedWriting
                 }
             }
             _sessionTitle.value = session.title ?: UNTITLED_SESSION_TITLE
@@ -11378,6 +11445,19 @@ class ChatViewModel(
                                 "ratio=${"%.3f".format(lastDispatchRatio)} predicted=$dispatchInputTokens " +
                                 "maxTokens=${dynamicMaxTokens(currentProvider, dispatchInputTokens)}",
                         )
+                        // [T-writing-controls] Main-turn request tuning
+                        // from the writing panel. temperature / topP pass
+                        // straight through — null when unset, which is
+                        // today's exact behaviour (provider / per-model
+                        // override decides). An active length target
+                        // raises the output floor so a long requested
+                        // reply is not strangled by the dynamic sizing;
+                        // no target → the dynamic value passes untouched.
+                        val dispatchMaxTokens = dynamicMaxTokens(currentProvider, dispatchInputTokens)
+                        val requestMaxTokens = writingMaxTokensFloor()?.let { floor ->
+                            minOf(32768, maxOf(dispatchMaxTokens, floor))
+                        } ?: dispatchMaxTokens
+                        val writingNow = _writingSettings.value
                         currentProvider.streamMessage(
                             // [T-android-payload-size-audit] (GH#352) Byte-side
                             // cross-check on the token estimate, outermost so it
@@ -11387,7 +11467,8 @@ class ChatViewModel(
                                     outboundHistory,
                                 ),
                             ),
-                            loopSystemPrompt, dynamicMaxTokens(currentProvider, dispatchInputTokens),
+                            loopSystemPrompt, requestMaxTokens,
+                            temperature = writingNow.temperature,
                             tools = if (helperWrapUpInjected) emptyList() else agentTools,
                             // [T-switch-model-thinking-gate] Gate on the provider that
                             // serves THIS turn. selectEntry swaps the class-level
@@ -11395,6 +11476,9 @@ class ChatViewModel(
                             // provider, so reading the class-level model would send the
                             // NEW model's reasoning decision to the OLD model.
                             thinkingLevel = if (currentProvider.model.supportsReasoning == true) _thinkingLevel.value else ThinkingLevel.OFF,
+                            // [T-writing-controls] Per-call top_p override
+                            // (see the temperature argument above).
+                            topP = writingNow.topP,
                         )
                     }
                     turnChunks.collect { chunk ->
@@ -15232,6 +15316,151 @@ class ChatViewModel(
         return sb.toString()
     }
 
+    // [T-writing-controls] The creative-writing section, appended after
+    // the tavern section. Activation is deliberately per-aspect, driven
+    // by what the user actually changed (or by a tavern session, which
+    // is novel writing by definition):
+    //   - novel craft paragraph: tavern session OR novelMode on.
+    //   - length paragraph + maxTokens floor: tavern session OR the
+    //     length controls differ from DEFAULT (tier moved, custom
+    //     K-chars set, or novelMode on — novel mode's length choice IS
+    //     its K-chars picker).
+    //   - style paragraph: tavern session OR style moved off default.
+    // A plain session whose user only nudged temperature gets NO prose
+    // instructions (only the sampling parameter changes), and a session
+    // nobody touched gets an empty string — prompt byte-identical.
+    private fun writingNovelCraftActive(
+        settings: com.lowhub.app.agent.WritingSettings,
+    ): Boolean = _tavernConfig.value != null || settings.novelMode
+
+    private fun writingLengthActive(
+        settings: com.lowhub.app.agent.WritingSettings,
+    ): Boolean {
+        if (_tavernConfig.value != null) return true
+        if (!writingSettingsDirty) return false
+        val d = com.lowhub.app.agent.WritingStore.DEFAULT
+        return settings.novelMode ||
+            settings.customKChars != null ||
+            settings.lengthTier != d.lengthTier
+    }
+
+    private fun writingStyleActive(
+        settings: com.lowhub.app.agent.WritingSettings,
+    ): Boolean {
+        if (_tavernConfig.value != null) return true
+        if (!writingSettingsDirty) return false
+        return settings.style != com.lowhub.app.agent.WritingStore.DEFAULT.style
+    }
+
+    /**
+     * [T-writing-controls] The length target (in characters) currently
+     * in force: novel mode's custom K-chars beats the tier; ULTRA is
+     * open-ended, represented by a null upper bound. Returns
+     * (lowerBound, upperBound?) or null when no length instruction is
+     * active.
+     */
+    private fun writingTargetRange(
+        settings: com.lowhub.app.agent.WritingSettings,
+    ): Pair<Int, Int?>? {
+        if (!writingLengthActive(settings)) return null
+        if (settings.novelMode && settings.customKChars != null) {
+            val target = settings.customKChars * 1000
+            return target to target
+        }
+        return when (settings.lengthTier) {
+            com.lowhub.app.agent.WritingStore.TIER_CONCISE -> 600 to 1200
+            com.lowhub.app.agent.WritingStore.TIER_DETAILED -> 2400 to 4800
+            com.lowhub.app.agent.WritingStore.TIER_ULTRA -> 4800 to null
+            else -> 1200 to 2400 // TIER_STANDARD and any unknown wire value
+        }
+    }
+
+    /**
+     * [T-writing-controls] Output-token floor for the main turn when a
+     * length target is active: the target's upper bound (ULTRA counts
+     * as 8000 chars) at ~1.8 tokens per Chinese character, so a long
+     * requested reply is not strangled by the dynamic budget. Applied
+     * as max(base, floor) capped at 32768 at the call site; returns
+     * null when no length target is active (call site then passes the
+     * dynamic value through untouched).
+     */
+    private fun writingMaxTokensFloor(): Int? {
+        val settings = _writingSettings.value
+        val (_, upper) = writingTargetRange(settings) ?: return null
+        val upperChars = upper ?: 8000
+        return kotlin.math.ceil(upperChars * 1.8).toInt()
+    }
+
+    private fun writingPromptSection(): String {
+        val settings = _writingSettings.value
+        val craft = writingNovelCraftActive(settings)
+        val range = writingTargetRange(settings)
+        val styleOn = writingStyleActive(settings)
+        if (!craft && range == null && !styleOn) return ""
+        val sb = StringBuilder()
+        sb.append("\n\n[Creative writing]\n")
+        if (craft) {
+            sb.append(
+                "Write like a novelist, in flowing narrative prose:\n" +
+                    "- Build scenes with concrete sensory detail — show, " +
+                    "do not tell.\n" +
+                    "- Bring characters to life through dialogue, action " +
+                    "and inner thought.\n" +
+                    "- Vary the rhythm and sentence length, and keep " +
+                    "continuity with everything written so far.\n" +
+                    "- Write in full paragraphs — never outlines, bullet " +
+                    "lists or summaries, unless the user explicitly asks " +
+                    "for them.\n",
+            )
+        }
+        if (range != null) {
+            val (lower, upper) = range
+            sb.append(
+                when {
+                    upper == null ->
+                        "- Length: write a long, full reply of at least " +
+                            "$lower characters (counted in Chinese " +
+                            "characters). Develop the scene completely; " +
+                            "do not wrap up early.\n"
+                    lower == upper ->
+                        "- Length: aim for roughly $lower characters " +
+                            "(counted in Chinese characters). Write the " +
+                            "current scene or passage to completion and " +
+                            "stop at a natural break — do not pad, and " +
+                            "never cut off mid-sentence.\n"
+                    else ->
+                        "- Length: aim for roughly $lower–$upper " +
+                            "characters (counted in Chinese characters). " +
+                            "Write the current scene or passage to " +
+                            "completion and stop at a natural break — do " +
+                            "not pad, and never cut off mid-sentence.\n"
+                },
+            )
+        }
+        if (styleOn) {
+            sb.append(
+                when (settings.style) {
+                    com.lowhub.app.agent.WritingStore.STYLE_VIVID ->
+                        "- Style: vivid and alive — rich sensory colour " +
+                            "and strong emotion, with lively, " +
+                            "characterful dialogue.\n"
+                    com.lowhub.app.agent.WritingStore.STYLE_CREATIVE ->
+                        "- Style: imaginative and daring — unexpected " +
+                            "imagery and turns, bold and original; " +
+                            "surprise the reader.\n"
+                    else -> // STYLE_PROFESSIONAL and any unknown wire value
+                        "- Style: polished, professional literary craft " +
+                            "— precise diction, deliberate structure and " +
+                            "pacing.\n"
+                },
+            )
+        }
+        // Same trailing-newline contract as tavernPromptSection: the
+        // tools preamble follows immediately after this section.
+        sb.append("\n")
+        return sb.toString()
+    }
+
     private fun buildSystemPrompt(): String? {
         // Cache-friendly layout: keep `base` byte-stable by stripping out anything
         // that varies per request, then append a "Runtime context" suffix at the
@@ -15346,7 +15575,7 @@ Memory system (currently DISABLED):
         // place for finding files and searching their contents, and steers the
         // model to rg (not in the default rootfs, hence the install-once step).
         // Mirrors iOS AIChatViewModel.baseSystemPrompt.
-        val base = identitySection + tavernPromptSection() + """You should proactively use shell commands to accomplish the user's tasks — installing packages (apk add), writing and running scripts, managing files, networking, and any other operations a Linux terminal can perform.
+        val base = identitySection + tavernPromptSection() + writingPromptSection() + """You should proactively use shell commands to accomplish the user's tasks — installing packages (apk add), writing and running scripts, managing files, networking, and any other operations a Linux terminal can perform.
 
 Available tools:
 - shell_execute: Run any shell command. Each invocation is an isolated process with stdout/stderr captured. Prefer this for most tasks — it is a real Linux environment with persistent filesystem. Common tools (python3, pip, curl, wget, git, ssh, etc.) can be installed via apk add; Python packages via pip install. Use `which <cmd>` to check if a tool is already installed before running apk add — many packages persist across sessions. When you need to wait before checking results (e.g. polling, waiting for a process), use the `delay` parameter instead of `sleep` in the command — delay blocks the agent flow without occupying the shell, so other concurrent tasks can use it during the wait. This avoids resource contention. Execution discipline for long-running or dispatched work: make tool calls immediately instead of describing intentions, and keep working until the task is complete. Within a turn, `delay` is your wait mechanism — to follow up on something still running, chain delay-then-check calls at a task-appropriate interval until you have the result or hit a sensible retry cap. For a check that should happen AFTER this turn ends, register it by running `minis-scheduled create …` via shell_execute (see the CLI list) — it fires a new turn at the scheduled time through a system alarm. NEVER end a turn with a promise of future action: 'I'll keep monitoring', 'will sync the result later', and ending right after a single still-running status check with 'let's keep waiting' are all the same violation — once your turn ends, NOTHING runs until the user's next message. If polling to completion is genuinely not worth blocking the turn, close honestly instead: either register a `minis-scheduled` follow-up (say so, with its task id) or state that you will only learn the outcome when the user next messages; see 'Scheduled tasks' later in this prompt.

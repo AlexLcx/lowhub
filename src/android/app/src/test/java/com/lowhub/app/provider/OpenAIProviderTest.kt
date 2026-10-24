@@ -412,7 +412,8 @@ class OpenAIProviderTest {
                 imageParts = emptyList(),
                 tools = emptyList(),
                 thinkingLevel = level,
-            )
+            topP = null,
+                )
         }
         return JSONObject(server.takeRequest().body.readUtf8())
     }

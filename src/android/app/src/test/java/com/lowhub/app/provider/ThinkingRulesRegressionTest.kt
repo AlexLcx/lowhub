@@ -116,6 +116,7 @@ class ThinkingRulesRegressionTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }
@@ -219,7 +220,8 @@ class ThinkingRulesRegressionTest {
                         imageParts = emptyList(),
                         tools = emptyList(),
                         thinkingLevel = level,
-                    )
+                    topP = null,
+                )
                 }
             }
             val body = JSONObject(server.takeRequest().body.readUtf8())
@@ -260,6 +262,7 @@ class ThinkingRulesRegressionTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = ThinkingLevel.HIGH,
+                topP = null,
                 )
             }
         }
@@ -914,7 +917,7 @@ class ThinkingRulesRegressionTest {
             provider.thinkingRuleInstanceId = "inst-anthropic-compat"
             runCatching {
                 runBlocking {
-                    provider.sendMessageClamped(plainHistory(), null, 4096, null, emptyList(), emptyList(), ThinkingLevel.HIGH)
+                    provider.sendMessageClamped(plainHistory(), null, 4096, null, emptyList(), emptyList(), ThinkingLevel.HIGH, null)
                 }
             }
             val wire = JSONObject(server.takeRequest().body.readUtf8())

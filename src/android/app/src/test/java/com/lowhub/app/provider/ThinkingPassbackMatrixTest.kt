@@ -143,6 +143,7 @@ class ThinkingPassbackMatrixTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }
@@ -169,6 +170,7 @@ class ThinkingPassbackMatrixTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }
@@ -195,6 +197,7 @@ class ThinkingPassbackMatrixTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }

@@ -754,6 +754,7 @@ class OpenAIProvider private constructor(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        topP: Double?,
     ): LLMResponse = withContext(Dispatchers.IO) {
         val textBuf = StringBuilder()
         var stopReason: String? = null
@@ -771,6 +772,7 @@ class OpenAIProvider private constructor(
             imageParts = imageParts,
             tools = tools,
             thinkingLevel = thinkingLevel,
+            topP = topP,
         ).collect { chunk ->
             when (chunk) {
                 is LLMStreamChunk.Text -> textBuf.append(chunk.text)
@@ -791,8 +793,9 @@ class OpenAIProvider private constructor(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        topP: Double?,
     ): Flow<LLMStreamChunk> = rawStreamMessage(
-        messages, systemPrompt, maxTokens, temperature, imageParts, tools, thinkingLevel,
+        messages, systemPrompt, maxTokens, temperature, imageParts, tools, thinkingLevel, topP,
     ).failOnSilentEmptyCompletion(name)
 
     private fun rawStreamMessage(
@@ -803,6 +806,7 @@ class OpenAIProvider private constructor(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        topP: Double?,
     ): Flow<LLMStreamChunk> = callbackFlow {
         val body = if (isCodexImageModel) {
             // [T-gpt-image2-codex-backend-route-android] gpt-image-2 on an
@@ -829,9 +833,9 @@ class OpenAIProvider private constructor(
             )
             buildCodexImageBody(messages)
         } else if (usesChatCompletionsAPI) {
-            buildRequestBody(messages, systemPrompt, maxTokens, stream = true, temperature = temperature, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel)
+            buildRequestBody(messages, systemPrompt, maxTokens, stream = true, temperature = temperature, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel, topP = topP)
         } else {
-            buildResponsesAPIBody(messages, systemPrompt, maxTokens, stream = true, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel)
+            buildResponsesAPIBody(messages, systemPrompt, maxTokens, stream = true, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel, topP = topP)
         }
         // T302: serialize the request body exactly once. Pre-T302 we called
         // body.toString() three times per request (debug log + OAuth byte
@@ -2167,6 +2171,9 @@ class OpenAIProvider private constructor(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition> = emptyList(),
         thinkingLevel: ThinkingLevel = ThinkingLevel.OFF,
+        // [T-writing-controls] Per-call top_p override (writing
+        // controls). Null = field absent, body byte-identical to before.
+        topP: Double? = null,
     ): JSONObject {
         // T264: cross-provider image sanitization, mirrors iOS
         // OpenAIAgentProvider.swift:744-768 / 900-918. When the target model
@@ -2200,6 +2207,13 @@ class OpenAIProvider private constructor(
 
         if (temperature != null) {
             body.put("temperature", temperature)
+        }
+
+        // [T-writing-controls] Explicit per-call top_p (writing
+        // controls). Wins over the per-model override in
+        // mergeModelOverridesBody, mirroring the temperature precedence.
+        if (topP != null) {
+            body.put("top_p", topP)
         }
 
         if (stream && !isOpenRouter) {
@@ -2626,7 +2640,7 @@ class OpenAIProvider private constructor(
         // body fields verbatim (no OpenAI→native conversion — callers own the
         // shape). User keys win over our defaults, but `model` is force-kept so a
         // stray override can't misroute. Mirrors generateImage's merge + iOS.
-        mergeModelOverridesBody(body, temperature)
+        mergeModelOverridesBody(body, temperature, explicitTopP = topP)
         mergeChatExtraBody(body)
 
         return body
@@ -2657,7 +2671,16 @@ class OpenAIProvider private constructor(
      * that body is part of the client fingerprint the ChatGPT backend validates,
      * and injecting user keys into it risks the whole path 400-ing.
      */
-    private fun mergeModelOverridesBody(body: JSONObject, explicitTemperature: Double?) {
+    private fun mergeModelOverridesBody(
+        body: JSONObject,
+        explicitTemperature: Double?,
+        // [T-writing-controls] The per-call top_p the caller passed
+        // (writing controls). Same precedence rule as temperature: a
+        // non-null explicit value beats the stored per-model override,
+        // so the override is merged only when this is null. Defaulted
+        // so other call sites keep their exact old behaviour.
+        explicitTopP: Double? = null,
+    ) {
         val o = modelOverrides ?: return
         if (isOAuth && !forceChatCompletions) return  // Codex OAuth exemption
 
@@ -2666,7 +2689,9 @@ class OpenAIProvider private constructor(
         if (explicitTemperature == null) {
             o.temperature?.let { body.put("temperature", it) }
         }
-        o.topP?.let { body.put("top_p", it) }
+        if (explicitTopP == null) {
+            o.topP?.let { body.put("top_p", it) }
+        }
 
         // extraBodyParams is a kotlinx JsonObject while the body is org.json,
         // so round-trip through the serialized form — the same idiom the export
@@ -3290,6 +3315,9 @@ class OpenAIProvider private constructor(
         imageParts: List<LLMMessage.ImagePart> = emptyList(),
         tools: List<AgentToolDefinition> = emptyList(),
         thinkingLevel: ThinkingLevel = ThinkingLevel.OFF,
+        // [T-writing-controls] Per-call top_p override (writing
+        // controls). Null = field absent, body byte-identical to before.
+        topP: Double? = null,
     ): JSONObject {
         // T264: same vision-capability gate as buildRequestBody. Responses API
         // path (Codex OAuth) is currently always wired to a vision-capable
@@ -3311,6 +3339,12 @@ class OpenAIProvider private constructor(
         // — but keeping the two builders in step means a future routing change
         // does not silently drop the user's Fast Mode choice.
         resolvedServiceTier()?.let { body.put("service_tier", it) }
+        // [T-writing-controls] Explicit per-call top_p — see
+        // buildRequestBody. The Responses API takes top_p as a top-level
+        // field just like Chat Completions.
+        if (topP != null) {
+            body.put("top_p", topP)
+        }
         body.put("store", false)
         body.put("parallel_tool_calls", true)
         // Stable per-conversation cache key so the Responses API can hit prompt
@@ -3770,7 +3804,9 @@ class OpenAIProvider private constructor(
         // [T-android-model-custom-params] buildResponsesAPIBody takes no
         // temperature parameter (no caller supplies one on this path), so there
         // is no "caller forced a value" case to defer to — pass null.
-        mergeModelOverridesBody(body, explicitTemperature = null)
+        // [T-writing-controls] top_p, unlike temperature, DOES arrive as a
+        // parameter here, so it defers the per-model override instead.
+        mergeModelOverridesBody(body, explicitTemperature = null, explicitTopP = topP)
 
         // [T-android-model-use-passthrough-mode GH#72] Same verbatim merge as the
         // chat-completions builder. Skipped for Codex OAuth inside mergeChatExtraBody.

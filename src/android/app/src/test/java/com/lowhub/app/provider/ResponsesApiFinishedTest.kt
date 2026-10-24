@@ -60,7 +60,8 @@ class ResponsesApiFinishedTest {
                 imageParts = emptyList(),
                 tools = emptyList(),
                 thinkingLevel = ThinkingLevel.OFF,
-            ).toList()
+            topP = null,
+                ).toList()
         }
     }
 

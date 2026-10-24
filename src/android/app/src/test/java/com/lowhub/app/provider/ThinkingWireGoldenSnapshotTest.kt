@@ -140,6 +140,7 @@ class ThinkingWireGoldenSnapshotTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }

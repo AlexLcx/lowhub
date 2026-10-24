@@ -144,6 +144,7 @@ class GPT6SolLunaOpus55Test {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }
@@ -206,6 +207,7 @@ class GPT6SolLunaOpus55Test {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }

@@ -90,7 +90,8 @@ class MistralReasoningFieldTest {
                 imageParts = emptyList(),
                 tools = emptyList(),
                 thinkingLevel = ThinkingLevel.MEDIUM,
-            )
+            topP = null,
+                )
         } }
         return JSONObject(server.takeRequest().body.readUtf8())
     }

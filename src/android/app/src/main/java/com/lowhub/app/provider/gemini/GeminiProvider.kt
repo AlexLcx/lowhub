@@ -57,6 +57,10 @@ class GeminiProvider(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        // [T-writing-controls] Accepted for interface parity but not
+        // forwarded: the writing-controls top_p passthrough covers the
+        // OpenAI and Anthropic wire formats only.
+        topP: Double?,
     ): LLMResponse = withContext(Dispatchers.IO) {
         val body = buildRequestBody(messages, systemPrompt, maxTokens, temperature, imageParts, tools, thinkingLevel)
         val url = "$basePath/models/${model.id}:generateContent?key=$apiKey"
@@ -92,6 +96,8 @@ class GeminiProvider(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        // [T-writing-controls] See sendMessageClamped — accepted, ignored.
+        topP: Double?,
     ): Flow<LLMStreamChunk> = rawStreamMessage(
         messages, systemPrompt, maxTokens, temperature, imageParts, tools, thinkingLevel,
     ).failOnSilentEmptyCompletion(name)

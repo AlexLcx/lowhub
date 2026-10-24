@@ -92,6 +92,7 @@ class OutboundFieldGatingTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }
@@ -118,6 +119,7 @@ class OutboundFieldGatingTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }

@@ -63,9 +63,15 @@ interface LLMProvider {
         imageParts: List<LLMMessage.ImagePart> = emptyList(),
         tools: List<AgentToolDefinition> = emptyList(),
         thinkingLevel: ThinkingLevel = ThinkingLevel.OFF,
+        // [T-writing-controls] Per-call nucleus-sampling override (the
+        // writing-controls panel's Top P). Null — the default for every
+        // pre-existing caller — sends nothing, exactly like temperature:
+        // the provider / per-model override then decides, and request
+        // bodies stay byte-identical to before.
+        topP: Double? = null,
     ): LLMResponse = sendMessageClamped(
         messages, systemPrompt, maxTokens, temperature, imageParts, tools,
-        clampThinkingLevel(thinkingLevel),
+        clampThinkingLevel(thinkingLevel), topP,
     )
 
     /** See [sendMessage] — the clamped, provider-implemented counterpart. */
@@ -77,9 +83,11 @@ interface LLMProvider {
         imageParts: List<LLMMessage.ImagePart> = emptyList(),
         tools: List<AgentToolDefinition> = emptyList(),
         thinkingLevel: ThinkingLevel = ThinkingLevel.OFF,
+        // [T-writing-controls] See [sendMessage]'s topP.
+        topP: Double? = null,
     ): Flow<LLMStreamChunk> = streamMessageClamped(
         messages, systemPrompt, maxTokens, temperature, imageParts, tools,
-        clampThinkingLevel(thinkingLevel),
+        clampThinkingLevel(thinkingLevel), topP,
     )
 
     /**
@@ -96,6 +104,9 @@ interface LLMProvider {
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        // [T-writing-controls] Per-call top_p override; null = send
+        // nothing (see [sendMessage]).
+        topP: Double?,
     ): LLMResponse
 
     /** See [sendMessageClamped]. */
@@ -107,6 +118,8 @@ interface LLMProvider {
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        // [T-writing-controls] See [sendMessageClamped].
+        topP: Double?,
     ): Flow<LLMStreamChunk>
 
     /**

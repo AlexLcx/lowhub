@@ -112,6 +112,7 @@ class ClaudeSonnet55Test {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }

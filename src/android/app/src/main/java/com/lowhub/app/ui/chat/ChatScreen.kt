@@ -149,6 +149,7 @@ import com.lowhub.app.data.FileMentionIndex
 import com.lowhub.app.logging.AppLogger
 import com.lowhub.app.ui.components.MinisAlertDialog
 import com.lowhub.app.ui.components.MinisMenu
+import androidx.compose.material.icons.outlined.AutoStories
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Bolt
 import androidx.compose.material.icons.outlined.History
@@ -952,6 +953,9 @@ fun ChatScreen(
     // [T-tavern-mode] Tavern setup sheet visibility (overflow menu →
     // "Tavern Mode" / "Tavern Settings").
     var showTavernSetup by remember { mutableStateOf(false) }
+    // [T-writing-controls] Writing settings sheet visibility (composer
+    // writing capsule).
+    var showWritingSettings by remember { mutableStateOf(false) }
     // [T-android-picker-provider-edit] Reopen the picker after a hand-off to
     // a provider's settings or Model Groups (iOS shows those over the picker).
     val reopenModelPickerOnResume = com.lowhub.app.ui.components.rememberReopenOnResume {
@@ -7009,6 +7013,64 @@ fun ChatScreen(
                             }
                         }
 
+                        // [T-writing-controls] Writing-controls capsule,
+                        // right after the thinking capsule: AutoStories
+                        // icon + the effective length (tier name, or the
+                        // custom "N千字" in novel mode). Tapping opens
+                        // the writing settings sheet. Highlighted when
+                        // this session's writing settings differ from
+                        // DEFAULT, or in a tavern session (novel craft
+                        // always applies there). Same capsule geometry
+                        // as the thinking capsule.
+                        Spacer(modifier = Modifier.width(8.dp))
+                        val composerWriting by viewModel.writingSettings.collectAsState()
+                        val composerTavern by viewModel.tavernConfig.collectAsState()
+                        val writingActive = composerTavern != null ||
+                            composerWriting != com.lowhub.app.agent.WritingStore.DEFAULT
+                        val writingTint = if (writingActive) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            ChatColors.secondaryText
+                        }
+                        val composerCustomK = composerWriting.customKChars
+                        val writingLabel = if (composerWriting.novelMode && composerCustomK != null) {
+                            stringResource(R.string.writing_k_chars, composerCustomK)
+                        } else {
+                            stringResource(
+                                when (composerWriting.lengthTier) {
+                                    com.lowhub.app.agent.WritingStore.TIER_CONCISE ->
+                                        R.string.writing_tier_concise
+                                    com.lowhub.app.agent.WritingStore.TIER_DETAILED ->
+                                        R.string.writing_tier_detailed
+                                    com.lowhub.app.agent.WritingStore.TIER_ULTRA ->
+                                        R.string.writing_tier_ultra
+                                    else -> R.string.writing_tier_standard
+                                },
+                            )
+                        }
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(ChatColors.secondaryText.copy(alpha = 0.12f))
+                                .clickable { showWritingSettings = true }
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Outlined.AutoStories,
+                                contentDescription = null,
+                                tint = writingTint,
+                                modifier = Modifier.size(15.dp),
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = writingLabel,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = writingTint,
+                            )
+                        }
+
                         // T187: Exit Edit Mode pill, only while editingMessageId
                         // is non-null. Tap clears the edit flag + composer text
                         // without truncating history. iOS parity:
@@ -7810,6 +7872,18 @@ fun ChatScreen(
                 showTavernSetup = false
                 onTavernLibraryClick()
             },
+        )
+    }
+
+    // [T-writing-controls] Writing settings bottom sheet (composer
+    // writing capsule). Every change applies immediately through
+    // updateWritingSettings — dismissing is the confirmation.
+    if (showWritingSettings) {
+        val currentWriting by viewModel.writingSettings.collectAsState()
+        WritingSettingsSheet(
+            settings = currentWriting,
+            onUpdate = { viewModel.updateWritingSettings(it) },
+            onDismiss = { showWritingSettings = false },
         )
     }
 

@@ -81,6 +81,7 @@ class GPT6AstraReasoningTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = level,
+                topP = null,
                 )
             }
         }

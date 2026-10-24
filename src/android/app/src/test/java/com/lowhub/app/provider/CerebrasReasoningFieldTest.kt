@@ -98,6 +98,7 @@ class CerebrasReasoningFieldTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = ThinkingLevel.MEDIUM,
+                topP = null,
                 )
             }
         }

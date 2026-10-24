@@ -70,6 +70,7 @@ class OpenRouterCacheControlTest {
                     imageParts = emptyList(),
                     tools = emptyList(),
                     thinkingLevel = ThinkingLevel.OFF,
+                topP = null,
                 )
             }
         }

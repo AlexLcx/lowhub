@@ -90,8 +90,9 @@ class AnthropicProvider(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        topP: Double?,
     ): LLMResponse = withContext(Dispatchers.IO) {
-        val body = buildRequestBody(messages, systemPrompt, maxTokens, stream = false, temperature = temperature, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel)
+        val body = buildRequestBody(messages, systemPrompt, maxTokens, stream = false, temperature = temperature, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel, topP = topP)
         val request = buildRequest(body.toString(), body)
         val response = client.newCall(request).execute()
         val responseBody = response.body?.string() ?: ""
@@ -112,8 +113,9 @@ class AnthropicProvider(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        topP: Double?,
     ): Flow<LLMStreamChunk> = rawStreamMessage(
-        messages, systemPrompt, maxTokens, temperature, imageParts, tools, thinkingLevel,
+        messages, systemPrompt, maxTokens, temperature, imageParts, tools, thinkingLevel, topP,
     ).failOnSilentEmptyCompletion(name)
 
     private fun rawStreamMessage(
@@ -124,8 +126,9 @@ class AnthropicProvider(
         imageParts: List<LLMMessage.ImagePart>,
         tools: List<AgentToolDefinition>,
         thinkingLevel: ThinkingLevel,
+        topP: Double?,
     ): Flow<LLMStreamChunk> = callbackFlow {
-        val body = buildRequestBody(messages, systemPrompt, maxTokens, stream = true, temperature = temperature, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel)
+        val body = buildRequestBody(messages, systemPrompt, maxTokens, stream = true, temperature = temperature, imageParts = imageParts, tools = tools, thinkingLevel = thinkingLevel, topP = topP)
         // T302: serialize the body exactly once and pass the string to
         // buildRequest. Pre-T302 body.toString() ran twice per call (once
         // here, once inside buildRequest); each emitted string was tens of
@@ -384,6 +387,9 @@ class AnthropicProvider(
         // [T-android-thinking-level-arch] Already clamped to the model ceiling by
         // LLMProvider.streamMessage/sendMessage before reaching here.
         thinkingLevel: ThinkingLevel = ThinkingLevel.OFF,
+        // [T-writing-controls] Per-call top_p override (writing
+        // controls). Null = field absent, body byte-identical to before.
+        topP: Double? = null,
     ): JSONObject {
         val body = JSONObject()
         body.put("model", model.id)
@@ -392,6 +398,15 @@ class AnthropicProvider(
 
         if (temperature != null && !thinkingLevel.isEnabled && !modelRejectsTemperature(model.id)) {
             body.put("temperature", temperature)
+        }
+
+        // [T-writing-controls] top_p under the same thinking gate as
+        // temperature above: with extended thinking on, Anthropic pins
+        // the sampling knobs (legacy thinking forces temperature = 1
+        // below; top_p is not accepted alongside it), so the override
+        // only reaches the wire on plain turns.
+        if (topP != null && !thinkingLevel.isEnabled) {
+            body.put("top_p", topP)
         }
 
         // Thinking / extended thinking. Two protocol shapes:
