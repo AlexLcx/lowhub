@@ -68,6 +68,8 @@ import com.lowhub.app.agent.SoulIcon
 import com.lowhub.app.agent.SoulFile
 import com.lowhub.app.agent.SoulMDParser
 import com.lowhub.app.agent.SoulMetadata
+import com.lowhub.app.agent.PersonaInfo
+import com.lowhub.app.agent.PersonaStore
 import com.lowhub.app.agent.SoulStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -124,6 +126,53 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
     // snapshot compared by value cannot drift out of sync with the fields.
     var baseline by remember { mutableStateOf<SoulFile?>(null) }
 
+    // [T-multi-persona] Persona library state. The editor below still edits
+    // exactly one Soul — the ACTIVE persona's — and [activePersonaId] is
+    // what Save writes back to. Switch / create / delete re-fill the editor
+    // through [applyLoaded] so the dirty check always starts clean.
+    var personas by remember { mutableStateOf<List<PersonaInfo>>(emptyList()) }
+    var activePersonaId by remember { mutableStateOf(PersonaStore.DEFAULT_ID) }
+    var pendingSwitchId by remember { mutableStateOf<String?>(null) }
+    var pendingCreate by remember { mutableStateOf(false) }
+    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newPersonaName by remember { mutableStateOf("") }
+
+    // Fill every editor field from [parsed] and rebuild the dirty-check
+    // baseline with the same normalization Save applies (ifBlank
+    // fallbacks) — a file whose `lang` is empty on disk would otherwise
+    // compare unequal to the field state the instant it loaded, and the
+    // screen would open already dirty.
+    fun applyLoaded(parsed: SoulFile) {
+        name = parsed.metadata.name
+        preservedEmoji = parsed.metadata.emoji
+        icon = parsed.metadata.icon
+        style = parsed.metadata.style
+        lang = parsed.metadata.lang
+        body = parsed.body
+        baseline = SoulFile(
+            metadata = SoulMetadata(
+                name = parsed.metadata.name.ifBlank { SoulMetadata.DEFAULT.name },
+                emoji = parsed.metadata.emoji.ifBlank { SoulMetadata.DEFAULT.emoji },
+                icon = parsed.metadata.icon,
+                style = parsed.metadata.style,
+                lang = parsed.metadata.lang.ifBlank { SoulMetadata.DEFAULT.lang },
+            ),
+            body = parsed.body,
+        )
+    }
+
+    // Re-read the persona list + active id off the IO thread.
+    fun refreshPersonas() {
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                PersonaStore.listPersonas(context) to PersonaStore.activeId(context)
+            }
+            personas = result.first
+            activePersonaId = result.second
+        }
+    }
+
     // [T-android-soul-custom-icon] Image import: decode → reject opaque →
     // centre-crop → 96px → PNG → base64 data URI. Runs off the main thread
     // because a full-resolution camera photo is expensive to decode and scan.
@@ -160,34 +209,24 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
     // already seeded on first run, but loading from a freshly cleared app
     // shouldn't crash.
     LaunchedEffect(Unit) {
-        val parsed = withContext(Dispatchers.IO) {
+        val initial = withContext(Dispatchers.IO) {
             SoulStore.ensureExists(context)
-            SoulStore.load(context) ?: SoulMDParser.parse(SoulStore.DEFAULT_CONTENT)
+            // [T-multi-persona] Seed the library too (idempotent), then read
+            // list + active alongside the live soul for [applyLoaded].
+            PersonaStore.ensureInitialized(context)
+            val soul = SoulStore.load(context) ?: SoulMDParser.parse(SoulStore.DEFAULT_CONTENT)
+            Triple(
+                soul,
+                PersonaStore.listPersonas(context),
+                PersonaStore.activeId(context),
+            )
         }
-        name = parsed.metadata.name
-        preservedEmoji = parsed.metadata.emoji
-        icon = parsed.metadata.icon
-        style = parsed.metadata.style
-        lang = parsed.metadata.lang
-        body = parsed.body
         // [T-android-soul-save-in-appbar] Snapshot what disk holds, so the
         // dirty check starts from the loaded state rather than from the
         // pre-load defaults (which would read as "changed" immediately).
-        //
-        // Rebuilt through the same normalisation Save applies (ifBlank
-        // fallbacks) rather than stored raw: a file whose `lang` is empty on
-        // disk would otherwise compare unequal to the field state the instant
-        // it loaded, and the screen would open already dirty.
-        baseline = SoulFile(
-            metadata = SoulMetadata(
-                name = parsed.metadata.name.ifBlank { SoulMetadata.DEFAULT.name },
-                emoji = parsed.metadata.emoji.ifBlank { SoulMetadata.DEFAULT.emoji },
-                icon = parsed.metadata.icon,
-                style = parsed.metadata.style,
-                lang = parsed.metadata.lang.ifBlank { SoulMetadata.DEFAULT.lang },
-            ),
-            body = parsed.body,
-        )
+        applyLoaded(initial.first)
+        personas = initial.second
+        activePersonaId = initial.third
         loaded = true
     }
 
@@ -211,7 +250,11 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
     val save: () -> Unit = {
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { SoulStore.save(context, currentFile) }
+                // [T-multi-persona] Save writes the ACTIVE persona (its
+                // library file + the live SOUL.md), not just SOUL.md.
+                withContext(Dispatchers.IO) {
+                    PersonaStore.savePersona(context, activePersonaId, currentFile)
+                }
                 onBack()
             } catch (t: Throwable) {
                 saveError = t.message ?: "save failed"
@@ -228,6 +271,30 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
     }
     BackHandler(enabled = isDirty) { showDiscardDialog = true }
 
+    // [T-multi-persona] Switch the active persona, then re-fill the editor
+    // from the newly active persona's file so it edits the right Soul.
+    val doSwitch: (String) -> Unit = { targetId ->
+        scope.launch {
+            val file = withContext(Dispatchers.IO) {
+                PersonaStore.setActive(context, targetId)
+                PersonaStore.loadPersona(context, targetId)
+            }
+            refreshPersonas()
+            if (file != null) applyLoaded(file)
+        }
+        Unit
+    }
+
+    // Tapping a non-active persona row: unsaved edits are guarded by a
+    // dedicated confirm (pendingSwitchId), NOT the back-navigation
+    // discard dialog — the two flows must not share state.
+    val requestSwitch: (String) -> Unit = { targetId ->
+        if (targetId != activePersonaId) {
+            if (isDirty) pendingSwitchId = targetId else doSwitch(targetId)
+        }
+        Unit
+    }
+
     SettingsScaffold(
         title = stringResource(R.string.soul_settings_title),
         onBack = attemptBack,
@@ -241,6 +308,66 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
             ) { Text(stringResource(R.string.soul_save)) }
         },
     ) {
+        // [T-multi-persona] Persona library: tap a row to make it active,
+        // delete from the row's trailing button, create from the bottom
+        // button. The editor sections below always show the ACTIVE persona.
+        SettingsSection(
+            header = stringResource(R.string.persona_section_title),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                personas.forEach { persona ->
+                    val isActivePersona = persona.id == activePersonaId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = !isActivePersona) {
+                                requestSwitch(persona.id)
+                            }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SoulIconGlyph(icon = persona.metadata.icon, sizeDp = 28.dp, emojiSp = 20.sp)
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            text = persona.metadata.name,
+                            fontSize = 15.sp,
+                            fontWeight = if (isActivePersona) FontWeight.SemiBold else FontWeight.Normal,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (isActivePersona) {
+                            Text(
+                                text = stringResource(R.string.persona_current),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                        if (personas.size > 1) {
+                            MinisTextButton(onClick = { pendingDeleteId = persona.id }) {
+                                Text(stringResource(R.string.persona_delete))
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                MinisOutlinedButton(
+                    onClick = {
+                        // [T-multi-persona] Same dirty guard as switching:
+                        // creating activates the new persona, which re-fills
+                        // the editor — unsaved edits need a confirm first.
+                        if (isDirty) {
+                            pendingCreate = true
+                        } else {
+                            newPersonaName = ""
+                            showCreateDialog = true
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text(stringResource(R.string.persona_new)) }
+            }
+        }
+
         SettingsSection(
             header = stringResource(R.string.soul_section_preview),
         ) {
@@ -431,6 +558,124 @@ fun SoulSettingsScreen(onBack: () -> Unit) {
             dismissButton = {
                 MinisTextButton(onClick = { showDiscardDialog = false }) {
                     Text(stringResource(R.string.soul_discard_cancel))
+                }
+            },
+        )
+    }
+
+    // [T-multi-persona] Switching with unsaved edits asks first; dismissing
+    // keeps the edits (same conservative reading as the discard dialog).
+    pendingSwitchId?.let { targetId ->
+        AlertDialog(
+            onDismissRequest = { pendingSwitchId = null },
+            title = { Text(stringResource(R.string.persona_switch_discard_title)) },
+            text = { Text(stringResource(R.string.persona_switch_discard_body)) },
+            confirmButton = {
+                MinisTextButton(onClick = {
+                    pendingSwitchId = null
+                    doSwitch(targetId)
+                }) { Text(stringResource(R.string.soul_discard_confirm)) }
+            },
+            dismissButton = {
+                MinisTextButton(onClick = { pendingSwitchId = null }) {
+                    Text(stringResource(R.string.soul_cancel))
+                }
+            },
+        )
+    }
+
+    // [T-multi-persona] Create with unsaved edits asks first (same dialog
+    // copy as the switch guard — creating activates the new persona, which
+    // is a switch as far as the editor's unsaved state is concerned).
+    if (pendingCreate) {
+        AlertDialog(
+            onDismissRequest = { pendingCreate = false },
+            title = { Text(stringResource(R.string.persona_switch_discard_title)) },
+            text = { Text(stringResource(R.string.persona_switch_discard_body)) },
+            confirmButton = {
+                MinisTextButton(onClick = {
+                    pendingCreate = false
+                    newPersonaName = ""
+                    showCreateDialog = true
+                }) { Text(stringResource(R.string.soul_discard_confirm)) }
+            },
+            dismissButton = {
+                MinisTextButton(onClick = { pendingCreate = false }) {
+                    Text(stringResource(R.string.soul_cancel))
+                }
+            },
+        )
+    }
+
+    // [T-multi-persona] Delete confirmation. Deleting the ACTIVE persona
+    // activates the first remaining one, so the editor is re-filled from
+    // the new active persona afterwards.
+    pendingDeleteId?.let { targetId ->
+        val targetName = personas.firstOrNull { it.id == targetId }?.metadata?.name ?: ""
+        AlertDialog(
+            onDismissRequest = { pendingDeleteId = null },
+            title = { Text(stringResource(R.string.persona_delete_confirm_title)) },
+            text = { Text(stringResource(R.string.persona_delete_confirm_body, targetName)) },
+            confirmButton = {
+                MinisButton(onClick = {
+                    pendingDeleteId = null
+                    scope.launch {
+                        val newActiveFile = withContext(Dispatchers.IO) {
+                            val wasActive = targetId == PersonaStore.activeId(context)
+                            PersonaStore.deletePersona(context, targetId)
+                            if (wasActive) {
+                                PersonaStore.loadPersona(context, PersonaStore.activeId(context))
+                            } else {
+                                null
+                            }
+                        }
+                        refreshPersonas()
+                        if (newActiveFile != null) applyLoaded(newActiveFile)
+                    }
+                }) { Text(stringResource(R.string.persona_delete)) }
+            },
+            dismissButton = {
+                MinisOutlinedButton(onClick = { pendingDeleteId = null }) {
+                    Text(stringResource(R.string.soul_cancel))
+                }
+            },
+        )
+    }
+
+    // [T-multi-persona] Create: a name (blank keeps the default name),
+    // then the new persona is created AND activated so the editor lands
+    // on it ready to customize.
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text(stringResource(R.string.persona_new)) },
+            text = {
+                OutlinedTextField(
+                    value = newPersonaName,
+                    onValueChange = { newPersonaName = it },
+                    label = { Text(stringResource(R.string.persona_new_name_hint)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            },
+            confirmButton = {
+                MinisButton(onClick = {
+                    val nameInput = newPersonaName
+                    showCreateDialog = false
+                    scope.launch {
+                        val file = withContext(Dispatchers.IO) {
+                            val newId = PersonaStore.createPersona(context, nameInput)
+                            PersonaStore.setActive(context, newId)
+                            PersonaStore.loadPersona(context, newId)
+                        }
+                        refreshPersonas()
+                        if (file != null) applyLoaded(file)
+                    }
+                }) { Text(stringResource(R.string.persona_create)) }
+            },
+            dismissButton = {
+                MinisOutlinedButton(onClick = { showCreateDialog = false }) {
+                    Text(stringResource(R.string.soul_cancel))
                 }
             },
         )

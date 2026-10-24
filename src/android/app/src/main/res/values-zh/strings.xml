@@ -286,6 +286,17 @@
     <string name="soul_icon_error_title">无法使用该图片</string>
     <string name="soul_icon_error_unreadable">无法读取该图片，请换一张试试。</string>
     <string name="soul_icon_error_too_large">该图片过大，无法存储。请换一张更简单的。</string>
+    <string name="persona_section_title">人格</string>
+    <string name="persona_new">新建人格</string>
+    <string name="persona_new_name_hint">人格名称</string>
+    <string name="persona_create">创建</string>
+    <string name="persona_current">当前</string>
+    <string name="persona_delete">删除</string>
+    <string name="persona_delete_confirm_title">删除人格？</string>
+    <string name="persona_delete_confirm_body">%1$s 将被永久删除，此操作无法撤销。</string>
+    <string name="persona_switch_discard_title">放弃修改并切换？</string>
+    <string name="persona_switch_discard_body">你对当前人格的修改尚未保存，切换后将放弃这些修改。</string>
+    <string name="persona_switch_action">切换人格</string>
     <string name="settings_env_vars">环境变量</string>
     <string name="settings_env_vars_subtitle">注入到沙箱内的变量</string>
     <string name="settings_section_storage">存储</string>

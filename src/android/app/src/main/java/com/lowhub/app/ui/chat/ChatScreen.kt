@@ -156,6 +156,7 @@ import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Extension
+import androidx.compose.material.icons.outlined.Face
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Terminal
@@ -897,6 +898,9 @@ fun ChatScreen(
     val coroutineScope = rememberCoroutineScope()
 
     var showModelPicker by remember { mutableStateOf(false) }
+    // [T-multi-persona] Persona picker sheet visibility (overflow menu →
+    // "Switch Persona"). Mirrors showModelPicker's hoisted-state pattern.
+    var showPersonaPicker by remember { mutableStateOf(false) }
     // [T-android-picker-provider-edit] Reopen the picker after a hand-off to
     // a provider's settings or Model Groups (iOS shows those over the picker).
     val reopenModelPickerOnResume = com.lowhub.app.ui.components.rememberReopenOnResume {
@@ -3339,6 +3343,21 @@ fun ChatScreen(
                                     },
                                 )
                             }
+                            // [T-multi-persona] Switch the global active
+                            // persona from the chat screen. The picker
+                            // writes through SoulStore.save, so the title /
+                            // identity and the next message's system prompt
+                            // pick the new persona up with no extra wiring.
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.persona_switch_action)) },
+                                onClick = {
+                                    showChatMenu = false
+                                    showPersonaPicker = true
+                                },
+                                leadingIcon = {
+                                    MenuItemIcon(Icons.Outlined.Face)
+                                },
+                            )
                             MinisMenuDivider()
                             // Token Usage (iOS parity)
                             DropdownMenuItem(
@@ -7588,6 +7607,14 @@ fun ChatScreen(
                 showThinkingLevelSheet = false
             },
             onDismiss = { showThinkingLevelSheet = false },
+        )
+    }
+
+    // [T-multi-persona] Persona Picker bottom sheet
+    if (showPersonaPicker) {
+        ChatPersonaPickerSheet(
+            onDismiss = { showPersonaPicker = false },
+            onSelected = { showPersonaPicker = false },
         )
     }
 

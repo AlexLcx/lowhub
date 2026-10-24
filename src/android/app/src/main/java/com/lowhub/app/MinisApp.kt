@@ -567,6 +567,11 @@ class MinisApp : Application(), ImageLoaderFactory {
         com.lowhub.app.agent.SoulStore.ensureExists(this)
         com.lowhub.app.agent.SoulStore.refreshCache(this)
 
+        // [T-multi-persona] Seed the persona library from the live SOUL.md.
+        // First run only in effect — the existing Soul becomes the active
+        // "default" persona, so single-persona users see no change.
+        runCatching { com.lowhub.app.agent.PersonaStore.ensureInitialized(this) }
+
         // T-config: minis-config CLI surface — registry / audit log /
         // master-switch store. Initialized eagerly here so
         // ConfigRegistry.get() is safe from any thread for the rest of

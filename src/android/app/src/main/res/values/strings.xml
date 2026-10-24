@@ -327,6 +327,17 @@
     <string name="soul_icon_error_title">Can\'t use that image</string>
     <string name="soul_icon_error_unreadable">That image couldn\'t be read. Try a different one.</string>
     <string name="soul_icon_error_too_large">That image is too large to store. Try a simpler one.</string>
+    <string name="persona_section_title">Personas</string>
+    <string name="persona_new">New Persona</string>
+    <string name="persona_new_name_hint">Name</string>
+    <string name="persona_create">Create</string>
+    <string name="persona_current">Current</string>
+    <string name="persona_delete">Delete</string>
+    <string name="persona_delete_confirm_title">Delete persona?</string>
+    <string name="persona_delete_confirm_body">%1$s will be permanently deleted. This can\'t be undone.</string>
+    <string name="persona_switch_discard_title">Discard changes and switch?</string>
+    <string name="persona_switch_discard_body">Your edits to the current persona have not been saved. Switching will discard them.</string>
+    <string name="persona_switch_action">Switch Persona</string>
     <string name="settings_env_vars">Environment Variables</string>
     <string name="settings_env_vars_subtitle">Variables injected into the sandbox</string>
     <string name="settings_section_storage">Storage</string>
