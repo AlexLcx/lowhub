@@ -31,7 +31,7 @@ fun customizationValue(key: String): String =
 // so plain local builds keep working.
 val lowhubKeystoreFile = System.getenv("LOWHUB_KEYSTORE_FILE")
     ?.takeIf { it.isNotBlank() }
-    ?.let { java.io.File(it) }
+    ?.let { File(it) }
     ?.takeIf { it.exists() }
 
 android {
