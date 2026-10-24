@@ -36,6 +36,11 @@ jobs:
 
       - name: 准备 Android SDK 命令行工具
         uses: android-actions/setup-android@v3
+        with:
+          # 该步骤默认会装 "tools platform-tools"，其中旧 tools 包已被 Google
+          # 从 SDK 仓库下架（sdkmanager 报 Failed to find package 'tools'），
+          # 故显式只装 platform-tools。
+          packages: platform-tools
 
       - name: 安装 SDK 组件（platform 36 / build-tools / CMake / NDK r28）
         run: |
