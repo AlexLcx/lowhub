@@ -10,12 +10,15 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ButtonElevation
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 
 // Material3 ButtonDefaults.MinHeight = 40dp; tuned to 48dp for touch
@@ -31,15 +34,53 @@ val MinisSmallButtonHeight = 32.dp
 
 private val SmallButtonContentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
 
+// [T-frosted-buttons] Approximate frosted glass (iPhone-style) for the main
+// buttons: a translucent container plus a 1dp translucent white edge —
+// bright in light mode, faint in dark mode. This is flat translucency only:
+// the project has no backdrop-blur dependency, and Compose's Modifier.blur
+// blurs the element itself rather than what sits behind it, so true frosted
+// glass is not achievable here. Only DEFAULT colors / border change —
+// callers passing explicit values keep their exact look.
+@Composable
+private fun frostedButtonColors(): ButtonColors {
+    val scheme = MaterialTheme.colorScheme
+    return ButtonDefaults.buttonColors(
+        containerColor = scheme.primary.copy(alpha = 0.62f),
+        contentColor = scheme.onPrimary,
+        disabledContainerColor = scheme.primary.copy(alpha = 0.38f),
+        disabledContentColor = scheme.onPrimary.copy(alpha = 0.7f),
+    )
+}
+
+@Composable
+private fun frostedOutlinedButtonColors(): ButtonColors {
+    val scheme = MaterialTheme.colorScheme
+    return ButtonDefaults.outlinedButtonColors(
+        containerColor = scheme.surface.copy(alpha = 0.45f),
+        contentColor = scheme.primary,
+        disabledContainerColor = scheme.surface.copy(alpha = 0.3f),
+        disabledContentColor = scheme.onSurface.copy(alpha = 0.38f),
+    )
+}
+
+@Composable
+private fun frostedBorderStroke(): BorderStroke {
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    return BorderStroke(1.dp, Color.White.copy(alpha = if (isDark) 0.22f else 0.55f))
+}
+
 @Composable
 fun MinisButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = ButtonDefaults.shape,
-    colors: ButtonColors = ButtonDefaults.buttonColors(),
-    elevation: ButtonElevation? = ButtonDefaults.buttonElevation(),
-    border: BorderStroke? = null,
+    colors: ButtonColors = frostedButtonColors(),
+    elevation: ButtonElevation? = ButtonDefaults.buttonElevation(
+        defaultElevation = 1.dp,
+        pressedElevation = 2.dp,
+    ),
+    border: BorderStroke? = frostedBorderStroke(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,
@@ -64,9 +105,9 @@ fun MinisOutlinedButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     shape: Shape = ButtonDefaults.outlinedShape,
-    colors: ButtonColors = ButtonDefaults.outlinedButtonColors(),
+    colors: ButtonColors = frostedOutlinedButtonColors(),
     elevation: ButtonElevation? = null,
-    border: BorderStroke? = ButtonDefaults.outlinedButtonBorder(enabled = enabled),
+    border: BorderStroke? = frostedBorderStroke(),
     contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     interactionSource: MutableInteractionSource? = null,
     content: @Composable RowScope.() -> Unit,

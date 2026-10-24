@@ -22,6 +22,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.core.app.ActivityCompat
@@ -45,6 +46,7 @@ import com.lowhub.app.ui.settings.KEY_FONT_APP_BASE
 import com.lowhub.app.ui.settings.KEY_KEEP_SCREEN_AWAKE
 import com.lowhub.app.ui.settings.KEY_LANGUAGE
 import com.lowhub.app.ui.settings.KEY_LAUNCH_SESSION
+import com.lowhub.app.ui.settings.KEY_MONET_DYNAMIC_COLOR
 import com.lowhub.app.ui.settings.KEY_THEME_MODE
 import com.lowhub.app.ui.settings.PREF_APPEARANCE
 import com.lowhub.app.ui.settings.getAppearancePrefs
@@ -511,12 +513,14 @@ class MainActivity : ComponentActivity() {
         setContent {
             val prefs = remember { getAppearancePrefs(this) }
             var themeMode by remember { mutableIntStateOf(prefs.getInt(KEY_THEME_MODE, 0)) }
+            var monetDynamicColor by remember { mutableStateOf(prefs.getBoolean(KEY_MONET_DYNAMIC_COLOR, true)) }
             var appBaseLevel by remember { mutableIntStateOf(prefs.getInt(KEY_FONT_APP_BASE, 0)) }
 
             DisposableEffect(prefs) {
                 val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
                     when (key) {
                         KEY_THEME_MODE -> themeMode = sp.getInt(KEY_THEME_MODE, 0)
+                        KEY_MONET_DYNAMIC_COLOR -> monetDynamicColor = sp.getBoolean(KEY_MONET_DYNAMIC_COLOR, true)
                         KEY_FONT_APP_BASE -> appBaseLevel = sp.getInt(KEY_FONT_APP_BASE, 0)
                         KEY_KEEP_SCREEN_AWAKE -> applyKeepScreenAwakeFlag(
                             SessionActivityTracker.activeSessions.value.isNotEmpty()
@@ -554,7 +558,7 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
             }
 
-            MinisTheme(darkTheme = darkTheme, fontScale = fontScale) {
+            MinisTheme(darkTheme = darkTheme, fontScale = fontScale, monetDynamicColor = monetDynamicColor) {
                 val navController = rememberNavController().also { this.navController = it }
 
                 // T166: drive `SessionActivityTracker.setPresent` /

@@ -197,6 +197,8 @@
     <string name="voice_service_shared_credential_note">该语音服务与其提供商共用 API 密钥和端点。要修改，请编辑对应的提供商。</string>
     <string name="voice_service_hidden_badge">已隐藏</string>
     <string name="add_provider_voice_chat_providers">语音对话提供商</string>
+    <string name="add_provider_vendor_templates">厂商模板</string>
+    <string name="add_provider_vendor_templates_footer">点选厂商将预填其协议与 API 地址，之后只需填入 API Key 即可。</string>
     <string name="add_provider_voice_templates_footer">语音转文字与文字转语音的提供商。提供商类型和基础 URL 已预先填好，只需补上你的 API 密钥。</string>
     <string name="add_provider_voice_capability_tts">语音合成（TTS）</string>
     <string name="add_provider_voice_capability_asr">语音识别（ASR）</string>
@@ -649,6 +651,8 @@
     <string name="appearance_show_chat_title">显示会话标题</string>
     <string name="appearance_show_chat_title_subtitle">滚动时显示当前会话标题</string>
     <string name="appearance_show_chat_title_footer">滚动浏览历史消息时，在聊天顶部以悬浮胶囊形式显示当前会话标题。</string>
+    <string name="appearance_monet_dynamic_color">莫奈取色（跟随壁纸）</string>
+    <string name="appearance_monet_dynamic_color_subtitle">根据壁纸生成应用配色（Android 12+）</string>
     <string name="chat_title_pill_session_default">未命名会话</string>
     <string name="appearance_section_grouping">分组</string>
     <string name="appearance_auto_grouping">自动归类</string>

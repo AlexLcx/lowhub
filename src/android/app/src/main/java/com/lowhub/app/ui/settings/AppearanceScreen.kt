@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.FormatSize
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Keyboard
 import androidx.compose.material.icons.outlined.Launch
 import androidx.compose.material.icons.outlined.Psychology
@@ -77,6 +78,10 @@ import kotlin.math.roundToInt
 // -- Preference Keys --
 const val PREF_APPEARANCE = "appearance_prefs"
 const val KEY_THEME_MODE = "theme_mode"            // 0=System, 1=Light, 2=Dark
+// [T-monet-dynamic-color] Material You dynamic color: when true (default)
+// and the device runs Android 12+, MinisTheme derives its color scheme from
+// the wallpaper instead of the built-in static schemes.
+const val KEY_MONET_DYNAMIC_COLOR = "monet_dynamic_color"  // Boolean, default true
 const val KEY_LAUNCH_SESSION = "launch_session"    // 0=Auto, 1=LastSession, 2=NewChat, 3=Home
 // iOS-aligned key names — match `@AppStorage("returnKeyBehavior")` and
 // `@AppStorage("keepScreenAwakeDuringTasks")` in ContentView.swift so
@@ -129,6 +134,10 @@ fun returnKeySendsMessage(context: Context): Boolean =
 
 fun keepScreenAwakeEnabled(context: Context): Boolean =
     getAppearancePrefs(context).getBoolean(KEY_KEEP_SCREEN_AWAKE, false)
+
+/** [T-monet-dynamic-color] Default ON — see [KEY_MONET_DYNAMIC_COLOR]. */
+fun monetDynamicColorEnabled(context: Context): Boolean =
+    getAppearancePrefs(context).getBoolean(KEY_MONET_DYNAMIC_COLOR, true)
 
 /** [T-android-auto-grouping] Default ON — see [KEY_AUTO_GROUPING]. */
 fun autoGroupingEnabled(context: Context): Boolean =
@@ -259,6 +268,7 @@ fun AppearanceScreen(
     val prefs = remember { getAppearancePrefs(context) }
 
     var themeMode by remember { mutableIntStateOf(prefs.getInt(KEY_THEME_MODE, 0)) }
+    var monetDynamicColor by remember { mutableStateOf(prefs.getBoolean(KEY_MONET_DYNAMIC_COLOR, true)) }
     var launchSession by remember { mutableIntStateOf(prefs.getInt(KEY_LAUNCH_SESSION, 0)) }
     var returnKeyBehavior by remember { mutableIntStateOf(prefs.getInt(KEY_RETURN_KEY_BEHAVIOR, 0)) }
     var keepScreenAwake by remember { mutableStateOf(prefs.getBoolean(KEY_KEEP_SCREEN_AWAKE, false)) }
@@ -314,9 +324,26 @@ fun AppearanceScreen(
                             tint = row.tint,
                         )
                     },
-                    showDivider = idx < themeRows.size - 1,
+                    // Divider on every choice row: the Monet switch row
+                    // below is the section's last row.
+                    showDivider = true,
                 )
             }
+            // [T-monet-dynamic-color] Wallpaper-derived Material You colors
+            // on Android 12+; MainActivity observes the pref and feeds it to
+            // MinisTheme, which falls back to the static schemes when off.
+            SettingsSwitchRow(
+                icon = Icons.Outlined.Palette,
+                iconColor = tileTeal,
+                title = stringResource(R.string.appearance_monet_dynamic_color),
+                subtitle = stringResource(R.string.appearance_monet_dynamic_color_subtitle),
+                checked = monetDynamicColor,
+                onCheckedChange = {
+                    monetDynamicColor = it
+                    prefs.edit().putBoolean(KEY_MONET_DYNAMIC_COLOR, it).apply()
+                },
+                showDivider = false,
+            )
         }
 
         // -- Launch Session --

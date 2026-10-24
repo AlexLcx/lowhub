@@ -1,7 +1,8 @@
 # 在 GitHub Actions 上构建 lowhub 安卓 APK。
 # 流程按 BUILDING.md 的 Android 章节：先从源码构建原生依赖
 # （PRoot、Alpine rootfs、rclone），再跑 Gradle assembleRelease。
-# release 构建在工程里配置为 debug 签名，所以产物可直接安装，无需自备签名文件。
+# 签名：配置了 LOWHUB_KEYSTORE_BASE64 secret 时用固定密钥签名（构建之间可互相
+# 覆盖安装）；未配置时工程回退到 debug 签名，产物仍可直接安装。
 name: Build APK
 
 on:
@@ -71,6 +72,24 @@ jobs:
           mkdir -p src/android/app/libs
           cp deps/build/rclone/rclone.aar src/android/app/libs/
 
+      # 固定签名密钥（可选）：把 secret 里的 base64 密钥库解码到临时目录，
+      # 并把 build.gradle.kts 读取的四个环境变量写进 $GITHUB_ENV。secret 为空
+      # 时只警告并继续，Gradle 侧会自动回退到 debug 签名。
+      - name: 准备固定签名密钥（可选）
+        run: |
+          if [ -n "${{ secrets.LOWHUB_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.LOWHUB_KEYSTORE_BASE64 }}" | base64 -d > "$RUNNER_TEMP/lowhub.keystore"
+            {
+              echo "LOWHUB_KEYSTORE_FILE=$RUNNER_TEMP/lowhub.keystore"
+              echo "LOWHUB_KEYSTORE_PASSWORD=${{ secrets.LOWHUB_KEYSTORE_PASSWORD }}"
+              echo "LOWHUB_KEY_ALIAS=lowhub"
+              echo "LOWHUB_KEY_PASSWORD=${{ secrets.LOWHUB_KEYSTORE_PASSWORD }}"
+            } >> "$GITHUB_ENV"
+            echo "固定签名密钥已就绪，本次构建使用 releaseFixed 签名。"
+          else
+            echo "警告：未配置 LOWHUB_KEYSTORE_BASE64 secret，本次构建回退到 debug 签名，与固定签名构建不可互相覆盖安装。"
+          fi
+
       - name: Gradle 构建 release APK
         working-directory: src/android
         run: ./gradlew :app:assembleRelease --no-daemon --stacktrace
@@ -96,7 +115,7 @@ jobs:
           tag_name: lowhub-latest
           name: lowhub 最新构建（自动打包）
           body: |
-            由 GitHub Actions 自动构建的 lowhub 安卓 APK（arm64，debug 签名，可直接安装）。
+            由 GitHub Actions 自动构建的 lowhub 安卓 APK（arm64，可直接安装；配置了固定签名密钥时可与历史版本互相覆盖安装）。
             下载下面的 lowhub.apk，在手机上允许“安装未知应用”后打开即可安装。
           files: lowhub.apk
           make_latest: true

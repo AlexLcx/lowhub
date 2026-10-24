@@ -142,6 +142,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Switch
 import com.lowhub.app.ui.settings.SettingsSwitch
+import com.lowhub.app.ui.settings.SoulIconGlyph
 import com.lowhub.app.BuildConfig
 import com.lowhub.app.R
 import com.lowhub.app.data.FileMentionIndex
@@ -6145,6 +6146,28 @@ fun ChatScreen(
                     val recIsRecording = recSttState == com.lowhub.app.speech.RecognitionState.RECORDING ||
                         recSttState == com.lowhub.app.speech.RecognitionState.STARTING ||
                         recSttState == com.lowhub.app.speech.RecognitionState.FINISHING
+                    // [T-composer-thinking] Thinking level surfaced in the
+                    // composer tool row (capsule + expandable picker below).
+                    // SAME source as the slash-command row: the ViewModel's
+                    // thinkingLevel flow / setThinkingLevel — no second
+                    // state holder, so both entry points always agree.
+                    val composerThinkingLevel by viewModel.thinkingLevel.collectAsState()
+                    val composerThinkingSupported = viewModel.currentModelSupportsReasoning
+                    var showThinkingPicker by remember { mutableStateOf(false) }
+                    if (showThinkingPicker && composerThinkingSupported) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            ThinkingLevelPicker(
+                                current = composerThinkingLevel,
+                                availableLevels = viewModel.availableThinkingLevels,
+                                onSelect = { viewModel.setThinkingLevel(it) },
+                            )
+                        }
+                    }
                     // [T-android-voice-panel] Inline voice mode replaces the text
                     // field with the panel (mirrors iOS inputFieldOrWaveform →
                     // InlineVoiceInputView). The legacy in-composer waveform
@@ -6773,7 +6796,8 @@ fun ChatScreen(
                                     Icons.Default.Add,
                                     contentDescription = "Attach",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp),
+                                    // [T-composer-compact-buttons] 20dp → 18dp.
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                             MinisMenu(
@@ -6824,6 +6848,23 @@ fun ChatScreen(
 
                         Spacer(modifier = Modifier.width(8.dp))
 
+                        // [T-composer-persona] Quick persona switch next to
+                        // the attach button: shows the active persona's glyph
+                        // and opens the SAME picker sheet as the ⋮ menu's
+                        // "Switch persona" entry (shared showPersonaPicker
+                        // state — no second sheet or state).
+                        val composerSoulMeta by com.lowhub.app.agent.SoulStore
+                            .cachedMetadata.collectAsState()
+                        InputCircleButton(onClick = { showPersonaPicker = true }) {
+                            SoulIconGlyph(
+                                icon = composerSoulMeta.icon,
+                                sizeDp = 18.dp,
+                                emojiSp = 15.sp,
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
                         // Left: "/" slash command button (iOS: italic /, bold)
                         InputCircleButton(onClick = {
                             if (viewModel.showSlashMenu.value) {
@@ -6834,11 +6875,49 @@ fun ChatScreen(
                         }) {
                             Text(
                                 "/",
-                                fontSize = 20.sp,
+                                // [T-composer-compact-buttons] 20sp → 18sp.
+                                fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+
+                        // [T-composer-thinking] Thinking-level capsule: shows
+                        // the current level (localized name, same label the
+                        // picker pills use); tapping toggles the full picker
+                        // row above the composer. Hidden entirely when the
+                        // current model offers no reasoning levels — same
+                        // gating as the slash-command row.
+                        if (composerThinkingSupported) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            val thinkingTint = if (composerThinkingLevel.isEnabled) {
+                                ChatColors.thinking
+                            } else {
+                                ChatColors.secondaryText
+                            }
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(ChatColors.secondaryText.copy(alpha = 0.12f))
+                                    .clickable { showThinkingPicker = !showThinkingPicker }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Psychology,
+                                    contentDescription = null,
+                                    tint = thinkingTint,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = composerThinkingLevel.localizedName(context),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = thinkingTint,
+                                )
+                            }
                         }
 
                         // T187: Exit Edit Mode pill, only while editingMessageId
@@ -6887,7 +6966,8 @@ fun ChatScreen(
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    // [T-composer-compact-buttons] 38dp → 32dp.
+                                    .size(32.dp)
                                     .background(ChatColors.inputIconBg, CircleShape)
                                     .border(0.5.dp, ChatColors.inputIconBorder, CircleShape)
                                     .clip(CircleShape)
@@ -7324,7 +7404,8 @@ fun ChatScreen(
                         if (showStop) {
                             Box(
                                 modifier = Modifier
-                                    .size(38.dp)
+                                    // [T-composer-compact-buttons] 38dp → 32dp, icon 20dp → 18dp.
+                                    .size(32.dp)
                                     .background(Color(0xFFFF3B30), CircleShape)
                                     .clip(CircleShape)
                                     .clickable { viewModel.cancelStream() },
@@ -7334,7 +7415,7 @@ fun ChatScreen(
                                     Icons.Default.Stop,
                                     contentDescription = "Stop",
                                     tint = Color.White,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         } else {

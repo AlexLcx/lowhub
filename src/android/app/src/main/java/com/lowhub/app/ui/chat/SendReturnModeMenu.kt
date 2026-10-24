@@ -215,7 +215,9 @@ fun ComposerSendButton(
     val a11yLabel = stringResource(R.string.send_return_mode_a11y_action)
     Box(
         modifier = modifier
-            .size(38.dp)
+            // [T-composer-compact-buttons] 38dp → 32dp, icon 20dp → 18dp
+            // (composer-only shrink, see ChatComposerWidgets).
+            .size(32.dp)
             .background(
                 if (canActivate) ChatColors.sendButton else ChatColors.sendButtonDisabled,
                 CircleShape,
@@ -246,7 +248,7 @@ fun ComposerSendButton(
             contentDescription = "Send",
             tint = if (canActivate) ChatColors.background
             else ChatColors.primaryText.copy(alpha = 0.5f),
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(18.dp),
         )
         SendReturnModeMenu(
             expanded = menuVisible,

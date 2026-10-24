@@ -404,6 +404,10 @@ internal fun AttachmentChip(
 
 // ─── Input Circle Button (iOS: 34×34 circle, secondary bg + border) ─────────
 
+// [T-composer-compact-buttons] Composer buttons shrunk ~15% (38dp → 32dp,
+// icons 20dp → 18dp) so the tool row leaves more room for the text field.
+// 32dp is the floor here: these Boxes are visual == tap target in one, so
+// they do not go below it. This component is only used inside the composer.
 @Composable
 internal fun InputCircleButton(
     onClick: () -> Unit,
@@ -411,7 +415,7 @@ internal fun InputCircleButton(
 ) {
     Box(
         modifier = Modifier
-            .size(38.dp)
+            .size(32.dp)
             .background(ChatColors.inputIconBg, CircleShape)
             .border(0.5.dp, ChatColors.inputIconBorder, CircleShape)
             .clip(CircleShape)
@@ -447,7 +451,8 @@ internal fun MicButton(
     val borderColor = if (isRecording) Color.Transparent else ChatColors.inputIconBorder
     Box(
         modifier = Modifier
-            .size(38.dp)
+            // [T-composer-compact-buttons] 38dp → 32dp, icon 20dp → 18dp.
+            .size(32.dp)
             .background(bg, CircleShape)
             .border(0.5.dp, borderColor, CircleShape)
             .clip(CircleShape)
@@ -462,7 +467,7 @@ internal fun MicButton(
             contentDescription = if (isVoiceActive) "Switch to keyboard"
             else if (isRecording) "Stop recording" else "Voice input",
             tint = tint,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(18.dp),
         )
         if (!localeBadge.isNullOrEmpty()) {
             Text(

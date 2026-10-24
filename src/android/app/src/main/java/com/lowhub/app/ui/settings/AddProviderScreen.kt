@@ -102,6 +102,11 @@ fun AddProviderScreen(
     var selectedVoiceTemplate by remember {
         mutableStateOf<com.lowhub.app.data.model.VoiceProviderTemplate?>(null)
     }
+    // [T-provider-templates] Same idea for chat vendor templates (e.g.
+    // DeepSeek): preseeds type/base URL/label/appendV1 on the configure step.
+    var selectedProviderTemplate by remember {
+        mutableStateOf<com.lowhub.app.data.model.ProviderTemplate?>(null)
+    }
 
     // Unified back handler: reuse each step's onBack so predictive-back gesture
     // and the top-bar arrow behave identically (go back to prior step, not exit).
@@ -113,12 +118,13 @@ fun AddProviderScreen(
                 selectedType = null
             }
             AddProviderStep.CONFIGURE -> {
-                // Voice-template entry skipped the credential step entirely —
-                // back returns straight to the type/template list.
-                if (selectedVoiceTemplate != null) {
+                // Template entry (voice or chat vendor) skipped the credential
+                // step entirely — back returns straight to the type/template list.
+                if (selectedVoiceTemplate != null || selectedProviderTemplate != null) {
                     step = AddProviderStep.CHOOSE_TYPE
                     selectedType = null
                     selectedVoiceTemplate = null
+                    selectedProviderTemplate = null
                 } else {
                     val creds = availableCredentials(selectedType!!)
                     if (creds.size == 1) {
@@ -158,6 +164,15 @@ fun AddProviderScreen(
                 selectedCredential = ProviderCredential.apiKey
                 step = AddProviderStep.CONFIGURE
             },
+            onSelectProviderTemplate = { template ->
+                // [T-provider-templates] Same preseed flow as voice templates:
+                // underlying protocol + API-key credential, straight to
+                // configure with the vendor's fixed endpoint.
+                selectedProviderTemplate = template
+                selectedType = template.providerType
+                selectedCredential = ProviderCredential.apiKey
+                step = AddProviderStep.CONFIGURE
+            },
         )
         AddProviderStep.CHOOSE_CREDENTIAL -> ChooseCredentialScreen(
             providerType = selectedType!!,
@@ -172,6 +187,7 @@ fun AddProviderScreen(
             credentialType = selectedCredential!!,
             providerRepository = providerRepository,
             voiceTemplate = selectedVoiceTemplate,
+            providerTemplate = selectedProviderTemplate,
             onBack = handleBack,
             onSaved = onSaved,
         )
@@ -251,6 +267,7 @@ private fun ChooseProviderScreen(
     onBack: () -> Unit,
     onSelect: (ProviderType) -> Unit,
     onSelectVoiceTemplate: (com.lowhub.app.data.model.VoiceProviderTemplate) -> Unit = {},
+    onSelectProviderTemplate: (com.lowhub.app.data.model.ProviderTemplate) -> Unit = {},
 ) {
     SettingsScaffold(
         title = stringResource(R.string.provider_list_add_provider),
@@ -317,6 +334,32 @@ private fun ChooseProviderScreen(
                     iconColor = iconColor,
                     onClick = { onSelect(type) },
                     showDivider = index < offeredTypes.size - 1,
+                )
+            }
+        }
+
+        // [T-provider-templates] Vendor Templates — one row per chat vendor
+        // template (e.g. DeepSeek). Tapping prefills the underlying protocol
+        // + the vendor's fixed base URL and jumps to configure, where the
+        // user only enters an API key. The row subtitle is the endpoint
+        // itself so the fixed address is visible before tapping.
+        val providerTemplates = com.lowhub.app.data.model.ProviderTemplate.all
+        val providerTemplateNotes = providerTemplates.mapNotNull { it.note }
+        SettingsSection(
+            header = stringResource(R.string.add_provider_vendor_templates),
+            footer = (
+                listOf(stringResource(R.string.add_provider_vendor_templates_footer)) + providerTemplateNotes
+                ).joinToString("\n"),
+        ) {
+            providerTemplates.forEachIndexed { index, template ->
+                val (icon, iconColor) = providerIcon(template.providerType)
+                SettingsRow(
+                    title = template.name,
+                    subtitle = template.baseURL,
+                    icon = icon,
+                    iconColor = iconColor,
+                    onClick = { onSelectProviderTemplate(template) },
+                    showDivider = index < providerTemplates.size - 1,
                 )
             }
         }
@@ -436,14 +479,16 @@ private fun ConfigureProviderScreen(
     credentialType: ProviderCredential,
     providerRepository: ProviderRepository,
     voiceTemplate: com.lowhub.app.data.model.VoiceProviderTemplate? = null,
+    providerTemplate: com.lowhub.app.data.model.ProviderTemplate? = null,
     onBack: () -> Unit,
     onSaved: () -> Unit,
 ) {
     // Compute default label with auto-increment (e.g. "OpenAI", "OpenAI 2", ...)
-    // A voice template preseeds its vendor name instead of the protocol name.
+    // A template (voice or chat vendor) preseeds its vendor name instead of
+    // the protocol name.
     val config by providerRepository.config.collectAsState()
     val defaultLabel = remember(config) {
-        val baseName = voiceTemplate?.name ?: providerType.displayName
+        val baseName = providerTemplate?.name ?: voiceTemplate?.name ?: providerType.displayName
         val existingLabels = config.instances.map { it.label }.toSet()
         if (baseName !in existingLabels) baseName
         else {
@@ -471,7 +516,9 @@ private fun ConfigureProviderScreen(
         if (!labelEdited) label = defaultLabel
     }
     var apiKey by remember { mutableStateOf("") }
-    var customBaseURL by remember { mutableStateOf(voiceTemplate?.baseURL ?: "") }
+    var customBaseURL by remember {
+        mutableStateOf(providerTemplate?.baseURL ?: voiceTemplate?.baseURL ?: "")
+    }
 
     SettingsScaffold(
         title = stringResource(R.string.add_provider_configure_provider, providerType.displayName),
@@ -506,7 +553,11 @@ private fun ConfigureProviderScreen(
                 customBaseURL = customBaseURL,
                 onCustomBaseURLChange = { customBaseURL = it },
                 providerRepository = providerRepository,
-                initialAppendV1 = voiceTemplate?.appendV1,
+                // [T-provider-templates] A chat template's appendV1 wins: for
+                // DeepSeek it is false because the fixed base URL already ends
+                // in /v1 — the saved endpoint must stay exactly
+                // https://api.deepseek.com/v1.
+                initialAppendV1 = providerTemplate?.appendV1 ?: voiceTemplate?.appendV1,
                 onSaved = onSaved,
             )
             ProviderCredential.oauth -> OAuthConfigSection(

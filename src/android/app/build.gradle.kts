@@ -22,6 +22,18 @@ val appCustomization = Properties().apply {
 fun customizationValue(key: String): String =
     (appCustomization.getProperty(key) ?: "").replace("\"", "\\\"")
 
+// [T-lowhub-fixed-signing] Optional fixed release signing key, supplied via
+// environment variables (CI decodes the LOWHUB_KEYSTORE_BASE64 secret into a
+// file and exports these — see .github/workflows/build-apk.yml). A fixed key
+// is what makes every release build install OVER the previous one; the debug
+// key changes per machine/CI runner and Android refuses such updates. When
+// the keystore is absent the release build type falls back to the debug key
+// so plain local builds keep working.
+val lowhubKeystoreFile = System.getenv("LOWHUB_KEYSTORE_FILE")
+    ?.takeIf { it.isNotBlank() }
+    ?.let { java.io.File(it) }
+    ?.takeIf { it.exists() }
+
 android {
     namespace = "com.lowhub.app"
     // [T-android-dynamic-island] Bumped 35→36 so the Android 16 (Baklava)
@@ -36,8 +48,8 @@ android {
         applicationId = "com.lowhub.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 28
-        versionName = "1.14"
+        versionCode = 29
+        versionName = "0.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -72,6 +84,22 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    signingConfigs {
+        // [T-lowhub-fixed-signing] Fixed release key read from the
+        // environment (see lowhubKeystoreFile above). Only populated when a
+        // keystore was actually supplied; buildTypes.release checks the same
+        // condition before selecting this config, so an unpopulated config
+        // is never used.
+        create("releaseFixed") {
+            if (lowhubKeystoreFile != null) {
+                storeFile = lowhubKeystoreFile
+                storePassword = System.getenv("LOWHUB_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("LOWHUB_KEY_ALIAS")
+                keyPassword = System.getenv("LOWHUB_KEY_PASSWORD")
+            }
         }
     }
 
@@ -116,7 +144,14 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            // [T-lowhub-fixed-signing] Prefer the fixed key when one was
+            // supplied via the environment so release builds can install
+            // over each other; otherwise keep the historical debug key.
+            signingConfig = if (lowhubKeystoreFile != null) {
+                signingConfigs.getByName("releaseFixed")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

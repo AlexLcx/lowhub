@@ -1,15 +1,19 @@
 package com.lowhub.app.ui.theme
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -154,9 +158,22 @@ private val MinisShapes = Shapes(
 fun MinisTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     fontScale: Float = 1f,
+    // [T-monet-dynamic-color] When true (the default, mirroring the
+    // Appearance pref) and the device runs Android 12+ (API 31), the
+    // Material color scheme is derived from the user's wallpaper (Monet /
+    // Material You). Below S, or when the user turns it off, the built-in
+    // static schemes apply. The chat palette below stays static either way —
+    // it carries chat-specific surface colors Monet has no equivalent for.
+    monetDynamicColor: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val context = LocalContext.current
+    val colorScheme = when {
+        monetDynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
+            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        darkTheme -> DarkColorScheme
+        else -> LightColorScheme
+    }
     val typography = scaledTypography(fontScale)
     val chatPalette = if (darkTheme) DarkChatPalette else LightChatPalette
 

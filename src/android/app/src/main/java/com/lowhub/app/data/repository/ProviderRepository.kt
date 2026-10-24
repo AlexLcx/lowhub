@@ -23,6 +23,7 @@ import com.lowhub.app.data.model.ModelGroup
 import com.lowhub.app.data.model.ProviderConfig
 import com.lowhub.app.data.model.ProviderCredential
 import com.lowhub.app.data.model.ProviderInstance
+import com.lowhub.app.data.model.ProviderTemplate
 import com.lowhub.app.data.model.ProviderType
 import com.lowhub.app.data.model.RoutingStrategy
 import com.lowhub.app.data.model.SubAgentDefinition
@@ -780,6 +781,23 @@ class ProviderRepository(private val context: Context) {
             android.util.Log.i(
                 "ProviderRepo",
                 "[Voice] addInstance seeded ${voiceSeeds.size} voice-template models for ${instance.label}",
+            )
+        }
+        // [T-provider-templates] Seed chat-template default models when the
+        // base URL matches a vendor template (e.g. DeepSeek). Unlike the
+        // voice seeds these vendors DO expose /models, so the seeds are a
+        // starting point the refresh reconcile keeps in sync.
+        val providerSeeds = ProviderTemplate.defaultEntries(instance)
+            .filter { seed ->
+                config.modelEntries.none {
+                    it.providerInstanceId == instance.id && it.baseModel.id == seed.baseModel.id
+                }
+            }
+        if (providerSeeds.isNotEmpty()) {
+            config.modelEntries.addAll(providerSeeds)
+            android.util.Log.i(
+                "ProviderRepo",
+                "[ProviderTemplate] addInstance seeded ${providerSeeds.size} template models for ${instance.label}",
             )
         }
         saveConfig(config)

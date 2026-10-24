@@ -232,6 +232,8 @@
     <string name="voice_service_shared_credential_note">This voice service shares the API key and endpoint of its provider. To change them, edit that provider.</string>
     <string name="voice_service_hidden_badge">Hidden</string>
     <string name="add_provider_voice_chat_providers">Voice Chat Providers</string>
+    <string name="add_provider_vendor_templates">Vendor Templates</string>
+    <string name="add_provider_vendor_templates_footer">Tap a vendor to prefill its protocol and API endpoint — you only need to enter an API key afterwards.</string>
     <string name="add_provider_voice_templates_footer">Speech-to-text and text-to-speech vendors. The provider type and base URL are prefilled — just add your API key.</string>
     <string name="add_provider_voice_capability_tts">Speech synthesis (TTS)</string>
     <string name="add_provider_voice_capability_asr">Speech recognition (ASR)</string>
@@ -722,6 +724,8 @@
     <string name="appearance_show_chat_title">Show chat title</string>
     <string name="appearance_show_chat_title_subtitle">Show a sticky title pill while scrolling</string>
     <string name="appearance_show_chat_title_footer">Display the current session title as a floating pill at the top of the chat while scrolling through history.</string>
+    <string name="appearance_monet_dynamic_color">Monet dynamic color</string>
+    <string name="appearance_monet_dynamic_color_subtitle">Derive app colors from your wallpaper (Android 12+)</string>
     <string name="chat_title_pill_session_default">Untitled</string>
     <string name="appearance_section_grouping">Grouping</string>
     <string name="appearance_auto_grouping">Auto-Grouping</string>
