@@ -35,7 +35,7 @@ cd "$SRC"
 gomobile bind -v \
   -target=android/arm64 \
   -androidapi 24 \
-  -javapkg=com.openminis.rclone \
+  -javapkg=com.lowhub.rclone \
   -ldflags="-s -w" \
   -o "$BUILD/rclone.aar" \
   ./gomobile
