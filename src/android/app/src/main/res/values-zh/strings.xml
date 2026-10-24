@@ -2170,4 +2170,23 @@
     <string name="tavern_mode_action">酒馆模式</string>
     <string name="tavern_settings_action">酒馆设定</string>
     <string name="tavern_disable_action">关闭酒馆模式</string>
+    <string name="tavern_field_example_dialogue">示例对话</string>
+    <string name="tavern_field_tags">标签（逗号分隔）</string>
+    <string name="tavern_entry_order">优先级（越大越先注入）</string>
+    <string name="tavern_ai_complete">AI 补全</string>
+    <string name="tavern_ai_working">AI 生成中…</string>
+    <string name="tavern_ai_failed">AI 请求失败，请确认已配置可用模型后重试。</string>
+    <string name="tavern_ai_theme_label">条目主题</string>
+    <string name="tavern_ai_generate_entries">AI 生成条目</string>
+    <string name="tavern_ai_create_entry">AI 对话创建</string>
+    <string name="tavern_ai_create_title">AI 对话创建角色卡</string>
+    <string name="tavern_ai_create_intro">说说你对角色的灵感吧——一个名字、一种感觉、一个世界，什么都可以。我会追问几个问题补齐设定，然后就能把我们的对话变成一张角色卡。</string>
+    <string name="tavern_ai_create_input_hint">说说你的灵感…</string>
+    <string name="tavern_ai_create_send">发送</string>
+    <string name="tavern_ai_create_generate">生成角色卡</string>
+    <string name="new_chat_mode_title">新建对话</string>
+    <string name="new_chat_mode_normal">普通对话</string>
+    <string name="new_chat_mode_normal_sub">常规的 AI 对话</string>
+    <string name="new_chat_mode_tavern">酒馆模式</string>
+    <string name="new_chat_mode_tavern_sub">选角色卡进行角色扮演</string>
 </resources>

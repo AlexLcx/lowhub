@@ -48,8 +48,8 @@ android {
         applicationId = "com.lowhub.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 30
-        versionName = "0.0.2"
+        versionCode = 31
+        versionName = "0.0.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

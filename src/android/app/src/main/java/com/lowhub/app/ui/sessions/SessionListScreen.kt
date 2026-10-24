@@ -503,6 +503,20 @@ fun SessionListScreen(
     providerRepository: ProviderRepository,
     onSessionClick: (String) -> Unit,
     onNewChat: (String) -> Unit,
+    /**
+     * [T-tavern-ai] New chat that starts in tavern mode: minted draft id
+     * plus the library ids picked in the setup sheet. The chat side
+     * re-reads the library items by id and binds a snapshot to the
+     * draft. Default no-op keeps previews/other callers unchanged.
+     */
+    onNewTavernChat: (
+        draftId: String,
+        characterId: String,
+        userRoleId: String?,
+        worldBookId: String?,
+    ) -> Unit = { _, _, _, _ -> },
+    /** [T-tavern-ai] Setup sheet's "Create" hand-off (no cards yet). */
+    onTavernLibraryClick: () -> Unit = {},
     onSettingsClick: () -> Unit,
     onAddProviderClick: () -> Unit = {},
     onSelectModelsClick: () -> Unit = {},
@@ -638,6 +652,19 @@ fun SessionListScreen(
         onSessionClick(id)
     }
     val onNewChatGuarded: (String) -> Unit = { id -> exitSearchIfQueryBlank(); onNewChat(id) }
+
+    // [T-tavern-ai] New-chat mode chooser state. Every user-initiated
+    // new-chat entry point funnels into requestNewChat with a mint
+    // lambda capturing ITS createNewSession arguments (plain / model
+    // group / folder), so the plain path stays exactly the old
+    // behaviour and the tavern path mints the identically-shaped draft.
+    var pendingNewChatMint by remember { mutableStateOf<(() -> String?)?>(null) }
+    var showNewChatModeSheet by remember { mutableStateOf(false) }
+    var showNewChatTavernSetup by remember { mutableStateOf(false) }
+    fun requestNewChat(mint: () -> String?) {
+        pendingNewChatMint = mint
+        showNewChatModeSheet = true
+    }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
     var deleteTargetId by remember { mutableStateOf<String?>(null) }
@@ -1001,10 +1028,9 @@ fun SessionListScreen(
                             onSelectModels = onSelectModelsClick,
                             onRestoreBackup = onRestoreBackupClick,
                             onStartConversation = {
-                                scope.launch {
-                                    val sessionId = viewModel.createNewSession()
-                                    if (sessionId != null) onNewChatGuarded(sessionId)
-                                }
+                                // [T-tavern-ai] Through the mode chooser
+                                // like every other new-chat entry point.
+                                requestNewChat { viewModel.createNewSession() }
                             },
                         )
                     }
@@ -1176,10 +1202,14 @@ fun SessionListScreen(
                                             if (block.isCollapsed) {
                                                 viewModel.toggleFolderCollapsed(block.folder.id)
                                             }
-                                            val sessionId = viewModel.createNewSession(
-                                                folderId = block.folder.id,
-                                            )
-                                            if (sessionId != null) onNewChatGuarded(sessionId)
+                                            // [T-tavern-ai] Mode chooser;
+                                            // the mint keeps the folder
+                                            // binding for both modes.
+                                            requestNewChat {
+                                                viewModel.createNewSession(
+                                                    folderId = block.folder.id,
+                                                )
+                                            }
                                         },
                                         onDeleteWithSessions = {
                                             folderToDelete = block.folder to block.totalCount
@@ -1349,16 +1379,14 @@ fun SessionListScreen(
                     isSearching = isSearching,
                     hasSessions = sessions.isNotEmpty() || isSearchActive,
                     onNewChat = {
-                        scope.launch {
-                            val sessionId = viewModel.createNewSession()
-                            if (sessionId != null) onNewChatGuarded(sessionId)
-                        }
+                        // [T-tavern-ai] Mode chooser first; the plain
+                        // choice mints exactly as this used to inline.
+                        requestNewChat { viewModel.createNewSession() }
                     },
                     onNewChatWithGroup = { groupId ->
-                        scope.launch {
-                            val sessionId = viewModel.createNewSession(groupId = groupId)
-                            if (sessionId != null) onNewChatGuarded(sessionId)
-                        }
+                        // Same chooser; the mint keeps the long-press
+                        // group binding for both modes.
+                        requestNewChat { viewModel.createNewSession(groupId = groupId) }
                     },
                     modelGroups = providerConfig.modelGroups,
                     onSearchToggle = {
@@ -1573,6 +1601,56 @@ fun SessionListScreen(
             onSave = { title, category ->
                 viewModel.updateTitleAndCategory(session.id, title, category)
                 editSession = null
+            },
+        )
+    }
+
+    // [T-tavern-ai] New-chat mode chooser: plain keeps the historical
+    // mint-and-go; tavern continues into the setup sheet and only then
+    // mints, so dismissing either sheet creates nothing.
+    if (showNewChatModeSheet) {
+        NewChatModeSheet(
+            onDismiss = {
+                showNewChatModeSheet = false
+                pendingNewChatMint = null
+            },
+            onNormalChat = {
+                showNewChatModeSheet = false
+                val draftId = pendingNewChatMint?.invoke()
+                pendingNewChatMint = null
+                if (draftId != null) onNewChatGuarded(draftId)
+            },
+            onTavernChat = {
+                showNewChatModeSheet = false
+                showNewChatTavernSetup = true
+            },
+        )
+    }
+    if (showNewChatTavernSetup) {
+        com.lowhub.app.ui.chat.TavernSetupSheet(
+            initialConfig = null,
+            onDismiss = {
+                showNewChatTavernSetup = false
+                pendingNewChatMint = null
+            },
+            onConfirm = { config ->
+                showNewChatTavernSetup = false
+                val draftId = pendingNewChatMint?.invoke()
+                pendingNewChatMint = null
+                if (draftId != null) {
+                    exitSearchIfQueryBlank()
+                    onNewTavernChat(
+                        draftId,
+                        config.character.id,
+                        config.userRole?.id,
+                        config.worldBook?.id,
+                    )
+                }
+            },
+            onCreateLibraryItem = {
+                showNewChatTavernSetup = false
+                pendingNewChatMint = null
+                onTavernLibraryClick()
             },
         )
     }

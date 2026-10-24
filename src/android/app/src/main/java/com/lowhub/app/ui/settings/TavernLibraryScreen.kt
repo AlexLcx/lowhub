@@ -8,15 +8,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -44,13 +50,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.lowhub.app.R
+import com.lowhub.app.agent.TavernAi
 import com.lowhub.app.agent.TavernCharacter
 import com.lowhub.app.agent.TavernStore
 import com.lowhub.app.agent.TavernUserRole
 import com.lowhub.app.agent.TavernWorldBook
+import com.lowhub.app.data.repository.ProviderRepository
 import com.lowhub.app.ui.components.FrostedButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -73,7 +82,11 @@ private sealed interface TavernEditTarget {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TavernLibraryScreen(onBack: () -> Unit) {
+fun TavernLibraryScreen(
+    providerRepository: ProviderRepository,
+    onBack: () -> Unit,
+    onAiCreateClick: () -> Unit = {},
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var tab by remember { mutableIntStateOf(0) }
@@ -82,6 +95,19 @@ fun TavernLibraryScreen(onBack: () -> Unit) {
     var characters by remember { mutableStateOf<List<TavernCharacter>>(emptyList()) }
     var userRoles by remember { mutableStateOf<List<TavernUserRole>>(emptyList()) }
     var worldBooks by remember { mutableStateOf<List<TavernWorldBook>>(emptyList()) }
+
+    // [T-tavern-ai] The AI-create flow is a pushed route; popping back
+    // here does not recompose this screen's effects, so without a
+    // resume reload a freshly created card would be invisible until
+    // some other state change happened to reload the lists.
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) reloadKey++
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     LaunchedEffect(reloadKey) {
         val loaded = withContext(Dispatchers.IO) {
@@ -104,6 +130,7 @@ fun TavernLibraryScreen(onBack: () -> Unit) {
     when (val target = editTarget) {
         is TavernEditTarget.Character -> TavernCharacterEditor(
             item = target.item,
+            providerRepository = providerRepository,
             onClose = { editTarget = null },
             onSaved = { character ->
                 scope.launch {
@@ -125,6 +152,7 @@ fun TavernLibraryScreen(onBack: () -> Unit) {
 
         is TavernEditTarget.UserRole -> TavernUserRoleEditor(
             item = target.item,
+            providerRepository = providerRepository,
             onClose = { editTarget = null },
             onSaved = { role ->
                 scope.launch {
@@ -146,6 +174,7 @@ fun TavernLibraryScreen(onBack: () -> Unit) {
 
         is TavernEditTarget.WorldBook -> TavernWorldBookEditor(
             item = target.item,
+            providerRepository = providerRepository,
             onClose = { editTarget = null },
             onSaved = { book ->
                 scope.launch {
@@ -203,6 +232,24 @@ fun TavernLibraryScreen(onBack: () -> Unit) {
                     }
                 }
                 Spacer(Modifier.height(12.dp))
+                // [T-tavern-ai] Co-create a character card by chatting
+                // with the AI — a separate pushed route, offered from
+                // the characters tab only.
+                if (tab == 0) {
+                    FrostedButton(
+                        onClick = onAiCreateClick,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(
+                            Icons.Filled.AutoAwesome,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.tavern_ai_create_entry))
+                    }
+                    Spacer(Modifier.height(12.dp))
+                }
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -216,7 +263,14 @@ fun TavernLibraryScreen(onBack: () -> Unit) {
                             characters.forEach { character ->
                                 TavernListRow(
                                     title = character.name,
-                                    summary = character.description.ifBlank { character.personality },
+                                    // [T-tavern-ai] Tags lead the summary line
+                                    // when the card carries any (library-only
+                                    // labels; never injected into prompts).
+                                    summary = listOf(
+                                        character.tags.joinToString(", "),
+                                        character.description
+                                            .ifBlank { character.personality },
+                                    ).filter { it.isNotBlank() }.joinToString(" · "),
                                     onClick = { editTarget = TavernEditTarget.Character(character) },
                                 )
                             }
@@ -407,18 +461,83 @@ private fun TavernEditorActions(
     }
 }
 
+/** Split a comma-separated editor field (ASCII or full-width commas). */
+private fun parseCsvList(raw: String): List<String> =
+    raw.split(',', '，').map { it.trim() }.filter { it.isNotEmpty() }
+
+/**
+ * [T-tavern-ai] Shared AI-action button for the tavern editors: frosted,
+ * sparkle-led, and while a request is in flight it disables itself and
+ * swaps to a spinner + "working" label. Results are filled back into
+ * the editor by the caller — nothing auto-saves.
+ */
 @Composable
-private fun TavernCharacterEditor(
+private fun TavernAiButton(
+    text: String,
+    busy: Boolean,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    FrostedButton(
+        onClick = onClick,
+        enabled = enabled && !busy,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        if (busy) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(18.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.tavern_ai_working))
+        } else {
+            Icon(
+                Icons.Filled.AutoAwesome,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(text)
+        }
+    }
+}
+
+/** The single failure line every tavern AI action degrades to. */
+@Composable
+private fun TavernAiErrorText() {
+    Spacer(Modifier.height(8.dp))
+    Text(
+        text = stringResource(R.string.tavern_ai_failed),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.error,
+    )
+}
+
+@Composable
+internal fun TavernCharacterEditor(
     item: TavernCharacter?,
+    providerRepository: ProviderRepository,
     onClose: () -> Unit,
     onSaved: (TavernCharacter) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val tavernAi = remember(context, providerRepository) {
+        TavernAi(context.applicationContext, providerRepository)
+    }
     var name by remember { mutableStateOf(item?.name ?: "") }
     var description by remember { mutableStateOf(item?.description ?: "") }
     var personality by remember { mutableStateOf(item?.personality ?: "") }
     var scenario by remember { mutableStateOf(item?.scenario ?: "") }
     var firstMessage by remember { mutableStateOf(item?.firstMessage ?: "") }
+    var exampleDialogue by remember { mutableStateOf(item?.exampleDialogue ?: "") }
+    // Tags are edited as raw comma text and parsed only on save / AI
+    // dispatch — same anti-comma-swallowing rule as entry keywords.
+    var tagsText by remember { mutableStateOf(item?.tags?.joinToString(", ") ?: "") }
+    var aiBusy by remember { mutableStateOf(false) }
+    var aiFailed by remember { mutableStateOf(false) }
 
     TavernEditorScaffold(
         title = stringResource(
@@ -466,6 +585,62 @@ private fun TavernCharacterEditor(
                 minLines = 3,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = exampleDialogue,
+                onValueChange = { exampleDialogue = it },
+                label = { Text(stringResource(R.string.tavern_field_example_dialogue)) },
+                minLines = 4,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = tagsText,
+                onValueChange = { tagsText = it },
+                label = { Text(stringResource(R.string.tavern_field_tags)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(16.dp))
+            // [T-tavern-ai] Expand whatever is typed so far into a full
+            // card and fill the fields back in — the user reviews and
+            // saves by hand, so a bad generation costs nothing.
+            TavernAiButton(
+                text = stringResource(R.string.tavern_ai_complete),
+                busy = aiBusy,
+            ) {
+                scope.launch {
+                    aiBusy = true
+                    aiFailed = false
+                    val result = tavernAi.completeCharacter(
+                        id = item?.id ?: TavernStore.newCharacterId(),
+                        name = name,
+                        description = description,
+                        personality = personality,
+                        scenario = scenario,
+                        exampleDialogue = exampleDialogue,
+                        firstMessage = firstMessage,
+                        tags = parseCsvList(tagsText),
+                    )
+                    if (result != null) {
+                        if (result.name.isNotBlank()) name = result.name
+                        if (result.description.isNotBlank()) description = result.description
+                        if (result.personality.isNotBlank()) personality = result.personality
+                        if (result.scenario.isNotBlank()) scenario = result.scenario
+                        if (result.exampleDialogue.isNotBlank()) {
+                            exampleDialogue = result.exampleDialogue
+                        }
+                        if (result.firstMessage.isNotBlank()) firstMessage = result.firstMessage
+                        if (result.tags.isNotEmpty()) {
+                            tagsText = result.tags.joinToString(", ")
+                        }
+                    } else {
+                        aiFailed = true
+                    }
+                    aiBusy = false
+                }
+            }
+            if (aiFailed) TavernAiErrorText()
             TavernEditorActions(
                 saveEnabled = name.isNotBlank(),
                 onSave = {
@@ -477,6 +652,8 @@ private fun TavernCharacterEditor(
                             personality = personality,
                             scenario = scenario,
                             firstMessage = firstMessage,
+                            exampleDialogue = exampleDialogue,
+                            tags = parseCsvList(tagsText),
                             updatedAt = System.currentTimeMillis(),
                         ),
                     )
@@ -490,12 +667,20 @@ private fun TavernCharacterEditor(
 @Composable
 private fun TavernUserRoleEditor(
     item: TavernUserRole?,
+    providerRepository: ProviderRepository,
     onClose: () -> Unit,
     onSaved: (TavernUserRole) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val tavernAi = remember(context, providerRepository) {
+        TavernAi(context.applicationContext, providerRepository)
+    }
     var name by remember { mutableStateOf(item?.name ?: "") }
     var description by remember { mutableStateOf(item?.description ?: "") }
+    var aiBusy by remember { mutableStateOf(false) }
+    var aiFailed by remember { mutableStateOf(false) }
 
     TavernEditorScaffold(
         title = stringResource(
@@ -519,6 +704,29 @@ private fun TavernUserRoleEditor(
                 minLines = 4,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(16.dp))
+            TavernAiButton(
+                text = stringResource(R.string.tavern_ai_complete),
+                busy = aiBusy,
+            ) {
+                scope.launch {
+                    aiBusy = true
+                    aiFailed = false
+                    val result = tavernAi.completeUserRole(
+                        id = item?.id ?: TavernStore.newUserRoleId(),
+                        name = name,
+                        description = description,
+                    )
+                    if (result != null) {
+                        if (result.name.isNotBlank()) name = result.name
+                        if (result.description.isNotBlank()) description = result.description
+                    } else {
+                        aiFailed = true
+                    }
+                    aiBusy = false
+                }
+            }
+            if (aiFailed) TavernAiErrorText()
             TavernEditorActions(
                 saveEnabled = name.isNotBlank(),
                 onSave = {
@@ -540,10 +748,16 @@ private fun TavernUserRoleEditor(
 @Composable
 private fun TavernWorldBookEditor(
     item: TavernWorldBook?,
+    providerRepository: ProviderRepository,
     onClose: () -> Unit,
     onSaved: (TavernWorldBook) -> Unit,
     onDelete: (() -> Unit)?,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val tavernAi = remember(context, providerRepository) {
+        TavernAi(context.applicationContext, providerRepository)
+    }
     var name by remember { mutableStateOf(item?.name ?: "") }
     var entries by remember { mutableStateOf(item?.entries ?: emptyList()) }
     // [T-tavern-mode] Keywords are edited as raw comma-separated text and
@@ -556,6 +770,19 @@ private fun TavernWorldBookEditor(
             }
         }
     }
+    // [T-tavern-ai] Entry order is edited as raw text too and parsed on
+    // save (invalid → 0): writing the parsed Int back on every keystroke
+    // would make typing "-5" or clearing the field impossible.
+    val orderText = remember {
+        mutableStateMapOf<String, String>().apply {
+            (item?.entries ?: emptyList()).forEach { entry ->
+                put(entry.id, entry.order.toString())
+            }
+        }
+    }
+    var aiTheme by remember { mutableStateOf("") }
+    var aiBusy by remember { mutableStateOf(false) }
+    var aiFailed by remember { mutableStateOf(false) }
 
     fun updateEntry(id: String, transform: (TavernWorldBook.Entry) -> TavernWorldBook.Entry) {
         entries = entries.map { if (it.id == id) transform(it) else it }
@@ -575,6 +802,40 @@ private fun TavernWorldBookEditor(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            Spacer(Modifier.height(16.dp))
+            // [T-tavern-ai] Describe a theme and let the model draft a
+            // batch of entries for it; they append to the list below,
+            // unsaved, exactly like hand-typed ones.
+            OutlinedTextField(
+                value = aiTheme,
+                onValueChange = { aiTheme = it },
+                label = { Text(stringResource(R.string.tavern_ai_theme_label)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            TavernAiButton(
+                text = stringResource(R.string.tavern_ai_generate_entries),
+                busy = aiBusy,
+                enabled = aiTheme.isNotBlank(),
+            ) {
+                scope.launch {
+                    aiBusy = true
+                    aiFailed = false
+                    val generated = tavernAi.generateWorldEntries(name, aiTheme)
+                    if (generated != null) {
+                        entries = entries + generated
+                        generated.forEach { entry ->
+                            keywordsText[entry.id] = entry.keywords.joinToString(", ")
+                            orderText[entry.id] = entry.order.toString()
+                        }
+                    } else {
+                        aiFailed = true
+                    }
+                    aiBusy = false
+                }
+            }
+            if (aiFailed) TavernAiErrorText()
             Spacer(Modifier.height(16.dp))
             Text(
                 text = stringResource(R.string.tavern_worldbook_entries),
@@ -615,6 +876,17 @@ private fun TavernWorldBookEditor(
                             minLines = 3,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        Spacer(Modifier.height(8.dp))
+                        // [T-tavern-ai] Injection priority — raw text
+                        // state (orderText), parsed on save, invalid → 0.
+                        OutlinedTextField(
+                            value = orderText[entry.id] ?: "",
+                            onValueChange = { orderText[entry.id] = it },
+                            label = { Text(stringResource(R.string.tavern_entry_order)) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -651,6 +923,7 @@ private fun TavernWorldBookEditor(
                             onClick = {
                                 entries = entries.filterNot { it.id == entry.id }
                                 keywordsText.remove(entry.id)
+                                orderText.remove(entry.id)
                             },
                         ) {
                             Icon(
@@ -668,6 +941,7 @@ private fun TavernWorldBookEditor(
                     val entry = TavernWorldBook.Entry(id = TavernStore.newEntryId())
                     entries = entries + entry
                     keywordsText[entry.id] = ""
+                    orderText[entry.id] = "0"
                 },
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null)
@@ -682,10 +956,10 @@ private fun TavernWorldBookEditor(
                             name = name.trim(),
                             entries = entries.map { entry ->
                                 entry.copy(
-                                    keywords = (keywordsText[entry.id] ?: "")
-                                        .split(',', '，')
-                                        .map { it.trim() }
-                                        .filter { it.isNotEmpty() },
+                                    keywords = parseCsvList(keywordsText[entry.id] ?: ""),
+                                    // Invalid priority text saves as 0.
+                                    order = orderText[entry.id]?.trim()
+                                        ?.toIntOrNull() ?: 0,
                                 )
                             },
                             updatedAt = System.currentTimeMillis(),

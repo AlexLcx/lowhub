@@ -269,6 +269,15 @@ private fun chatPaneScaffoldDirective(twoPane: Boolean, listPaneWidth: Dp): Pane
 @Composable
 fun ChatSplitScaffold(
     initialSessionId: String?,
+    /**
+     * [T-tavern-ai] Tavern library ids arriving WITH [initialSessionId]
+     * (the chat route's query arguments for a just-minted tavern draft).
+     * Seed the same pending-selection state the list pane's mode
+     * chooser writes to, so both entries converge on one consume path.
+     */
+    initialTavernCharId: String? = null,
+    initialTavernRoleId: String? = null,
+    initialTavernBookId: String? = null,
     listPane: @Composable (
         selectedSessionId: String?,
         /**
@@ -284,6 +293,8 @@ fun ChatSplitScaffold(
          */
         draftPlaceholderId: String?,
         onSessionSelected: (String) -> Unit,
+        /** [T-tavern-ai] Select a fresh draft AND carry its tavern picks. */
+        onTavernSessionSelected: (PendingTavernSelection) -> Unit,
     ) -> Unit,
     detailPane: @Composable (
         sessionId: String,
@@ -298,6 +309,8 @@ fun ChatSplitScaffold(
         onToggleSidebar: (() -> Unit)?,
         /** Whether the list is currently hidden — picks the icon direction. */
         sidebarCollapsed: Boolean,
+        /** [T-tavern-ai] Pending tavern picks for THIS session, if any. */
+        pendingTavern: PendingTavernSelection?,
     ) -> Unit,
 ) {
     val twoPane = shouldUseTwoPane()
@@ -331,6 +344,26 @@ fun ChatSplitScaffold(
     // See the long note at its former position further down for why the
     // selection is hoisted here at all.
     var selectedSessionId by rememberSaveable { mutableStateOf(initialSessionId) }
+
+    // [T-tavern-ai] Tavern picks waiting for their draft's ChatScreen to
+    // consume them. Seeded from the route arguments when this scaffold
+    // was opened on a tavern draft; replaced whenever the list pane's
+    // mode chooser starts another tavern draft. Keyed by draft id (the
+    // detail pane only receives the selection meant for its session).
+    var pendingTavern by remember {
+        mutableStateOf(
+            if (initialSessionId != null && initialTavernCharId != null) {
+                PendingTavernSelection(
+                    draftId = initialSessionId,
+                    characterId = initialTavernCharId,
+                    userRoleId = initialTavernRoleId,
+                    worldBookId = initialTavernBookId,
+                )
+            } else {
+                null
+            },
+        )
+    }
 
     // [T-android-tablet-sidebar-collapse] Whether the list pane is hidden.
     //
@@ -526,10 +559,22 @@ fun ChatSplitScaffold(
                                 .rememberPersistedId(currentSessionId),
                         )
                     ) currentSessionId else null,
-                ) { sessionId ->
-                    selectedSessionId = sessionId
+                    { sessionId ->
+                        selectedSessionId = sessionId
+                        scope.launch {
+                            navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, sessionId)
+                        }
+                    },
+                ) { selection ->
+                    // [T-tavern-ai] Same selection+navigate as a plain
+                    // session tap, plus the pending tavern picks.
+                    pendingTavern = selection
+                    selectedSessionId = selection.draftId
                     scope.launch {
-                        navigator.navigateTo(ListDetailPaneScaffoldRole.Detail, sessionId)
+                        navigator.navigateTo(
+                            ListDetailPaneScaffoldRole.Detail,
+                            selection.draftId,
+                        )
                     }
                 }
             }
@@ -631,6 +676,9 @@ fun ChatSplitScaffold(
                             null
                         },
                         listCollapsed,
+                        // [T-tavern-ai] Only the draft the picks were made
+                        // for sees them; every other session gets null.
+                        pendingTavern?.takeIf { it.draftId == sessionId },
                     )
                 }
                     }
@@ -841,6 +889,21 @@ fun newDraftSessionId(): String = "__new__${UUID.randomUUID()}"
 fun isDraftSessionId(id: String?): Boolean = id?.startsWith("__new__") == true
 
 /**
+ * [T-tavern-ai] A tavern selection travelling with a freshly minted
+ * draft: the list pane (mode chooser → setup sheet) or the chat
+ * route's query arguments produced it, and the detail pane's
+ * ChatScreen consumes it once to bind the tavern snapshot. Library ids
+ * only — the chat side re-reads the items and snapshots them, so a
+ * card deleted in between simply voids the selection.
+ */
+data class PendingTavernSelection(
+    val draftId: String,
+    val characterId: String,
+    val userRoleId: String?,
+    val worldBookId: String?,
+)
+
+/**
  * [T-android-tablet-split] Route-level wiring for [ChatSplitScaffold].
  *
  * Both `Routes.SESSION_LIST` and `Routes.CHAT` render this; they differ only in
@@ -857,10 +920,18 @@ fun ChatSplitScaffoldRoute(
     memoryRepository: com.lowhub.app.data.repository.MemoryRepository?,
     skillRepository: com.lowhub.app.data.repository.SkillRepository?,
     mcpRepository: com.lowhub.app.data.repository.MCPRepository?,
+    /** [T-tavern-ai] Tavern picks from the chat route's query arguments. */
+    initialTavernCharId: String? = null,
+    initialTavernRoleId: String? = null,
+    initialTavernBookId: String? = null,
 ) {
     ChatSplitScaffold(
         initialSessionId = initialSessionId,
-        listPane = { selectedSessionId, draftPlaceholderId, onSessionSelected ->
+        initialTavernCharId = initialTavernCharId,
+        initialTavernRoleId = initialTavernRoleId,
+        initialTavernBookId = initialTavernBookId,
+        listPane = { selectedSessionId, draftPlaceholderId, onSessionSelected,
+            onTavernSessionSelected ->
             com.lowhub.app.ui.sessions.SessionListScreen(
                 chatRepository = chatRepository,
                 providerRepository = providerRepository,
@@ -871,6 +942,14 @@ fun ChatSplitScaffoldRoute(
                 // phone behaviour is unchanged.
                 onSessionClick = onSessionSelected,
                 onNewChat = onSessionSelected,
+                // [T-tavern-ai] The mode chooser's tavern outcome: same
+                // pane selection as a new chat, carrying the picks.
+                onNewTavernChat = { draftId, characterId, userRoleId, worldBookId ->
+                    onTavernSessionSelected(
+                        PendingTavernSelection(draftId, characterId, userRoleId, worldBookId),
+                    )
+                },
+                onTavernLibraryClick = { navController.safeNavigate(Routes.TAVERN_LIBRARY) },
                 onSettingsClick = { navController.safeNavigate(Routes.SETTINGS) },
                 onAddProviderClick = { navController.safeNavigate(Routes.ADD_PROVIDER) },
                 onSelectModelsClick = { navController.safeNavigate(Routes.ONBOARDING_MODELS) },
@@ -888,7 +967,7 @@ fun ChatSplitScaffoldRoute(
             )
         },
         detailPane = { sessionId, onBackInPane, onNewChatInPane, onMoveToInPane,
-            onToggleSidebar, sidebarCollapsed ->
+            onToggleSidebar, sidebarCollapsed, pendingTavern ->
             com.lowhub.app.ui.chat.ChatScreen(
                 // The pane navigator's contentKey IS the session id, so a
                 // draft ("__new__…") flows through unchanged and ChatScreen's
@@ -951,6 +1030,12 @@ fun ChatSplitScaffoldRoute(
                 // [T-tavern-mode] Setup sheet's "Create" hand-off when the
                 // tavern library has no character cards yet.
                 onTavernLibraryClick = { navController.safeNavigate(Routes.TAVERN_LIBRARY) },
+                // [T-tavern-ai] One-shot tavern picks for a fresh draft
+                // (mode chooser / chat route arguments); null for every
+                // ordinary session.
+                pendingTavernCharId = pendingTavern?.characterId,
+                pendingTavernRoleId = pendingTavern?.userRoleId,
+                pendingTavernBookId = pendingTavern?.worldBookId,
             )
         },
     )

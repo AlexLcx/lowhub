@@ -15144,8 +15144,11 @@ class ChatViewModel(
      * World-book matching runs against the last ~12 messages' text
      * (lowercased substring, same rule as SillyTavern-style lorebooks):
      * an entry fires when it is enabled AND (always-on OR any keyword
-     * hits). Injected lore is capped at ~6000 chars total, in entry
-     * order — later entries are dropped once the budget is spent.
+     * hits). Injected lore is capped at ~6000 chars total; fired
+     * entries go in [com.lowhub.app.agent.TavernWorldBook.Entry.order]
+     * descending (authored order within a tie) and later ones are
+     * dropped once the budget is spent. The card's example dialogue,
+     * when present, rides along as a style-only reference block.
      */
     private fun tavernPromptSection(): String {
         val config = _tavernConfig.value ?: return ""
@@ -15177,6 +15180,16 @@ class ChatViewModel(
         if (character.scenario.isNotBlank()) {
             sb.append("\nScenario: ").append(character.scenario.trim())
         }
+        // [T-tavern-ai] Example dialogue teaches voice, not plot: it is
+        // a style reference the model should imitate, never a transcript
+        // to continue. Only injected when the card carries one.
+        if (character.exampleDialogue.isNotBlank()) {
+            sb.append(
+                "\n\nExample dialogue (imitate the style and tone; " +
+                    "do not continue it verbatim):",
+            )
+            sb.append("\n").append(character.exampleDialogue.trim())
+        }
         config.userRole?.let { role ->
             sb.append("\n\nThe user is playing the role of ${role.name}")
             if (role.description.isNotBlank()) {
@@ -15190,7 +15203,12 @@ class ChatViewModel(
                 .lowercase()
             var budget = 6000
             val fired = mutableListOf<String>()
-            for (entry in book.entries) {
+            // [T-tavern-ai] Higher-order entries inject first (and so
+            // survive the char budget); sortedWith is stable, so equal
+            // orders keep their authored sequence.
+            for (entry in book.entries.sortedWith(
+                compareByDescending<com.lowhub.app.agent.TavernWorldBook.Entry> { it.order },
+            )) {
                 if (budget <= 0) break
                 if (!entry.enabled || entry.content.isBlank()) continue
                 val hit = entry.alwaysOn || entry.keywords.any { kw ->

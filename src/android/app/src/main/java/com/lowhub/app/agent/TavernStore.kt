@@ -16,6 +16,12 @@ import kotlinx.serialization.json.Json
  * traits / voice, [scenario] the setting the roleplay opens in, and
  * [firstMessage] the optional in-character opening line inserted as the
  * first assistant message when a tavern chat starts.
+ *
+ * [T-tavern-ai] SillyTavern-style extras: [exampleDialogue] is a sample
+ * exchange teaching the model the character's voice (injected as a
+ * style block, never as history), and [tags] are library-only labels —
+ * shown in the list, never injected. Both default empty so pre-existing
+ * card files (which lack the keys) still decode.
  */
 @Serializable
 data class TavernCharacter(
@@ -25,6 +31,8 @@ data class TavernCharacter(
     val personality: String = "",
     val scenario: String = "",
     val firstMessage: String = "",
+    val exampleDialogue: String = "",
+    val tags: List<String> = emptyList(),
     val updatedAt: Long = 0L,
 )
 
@@ -58,6 +66,13 @@ data class TavernWorldBook(
         val content: String = "",
         val alwaysOn: Boolean = false,
         val enabled: Boolean = true,
+        /**
+         * [T-tavern-ai] Injection priority (SillyTavern's "Order"):
+         * when several entries fire, higher [order] is injected first
+         * and therefore survives the lore char budget first. Defaults
+         * to 0 so pre-existing book files still decode.
+         */
+        val order: Int = 0,
     )
 }
 

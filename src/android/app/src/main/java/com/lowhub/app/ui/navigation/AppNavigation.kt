@@ -87,7 +87,14 @@ private val EmphasizedAccelerate = CubicBezierEasing(0.3f, 0.0f, 0.8f, 0.15f)
 
 object Routes {
     const val SESSION_LIST = "sessions"
-    const val CHAT = "chat/{sessionId}"
+    /**
+     * [T-tavern-ai] The tavern query arguments are optional (nullable,
+     * defaulted) — every pre-existing `chat/<id>` link keeps matching.
+     * They carry the library ids picked for a just-minted tavern draft;
+     * see [chatWithTavern].
+     */
+    const val CHAT =
+        "chat/{sessionId}?tavernChar={tavernChar}&tavernRole={tavernRole}&tavernBook={tavernBook}"
     const val SETTINGS = "settings"
     const val PROVIDER_LIST = "providers"
     const val ADD_PROVIDER = "add_provider"
@@ -179,6 +186,8 @@ object Routes {
     const val SOUL = "soul"
     /** [T-tavern-mode] Tavern library (character cards / user roles / world books). */
     const val TAVERN_LIBRARY = "tavern_library"
+    /** [T-tavern-ai] Co-create a character card through a chat with the AI. */
+    const val TAVERN_AI_CREATE = "tavern_ai_create"
     const val MEMORY_FILE_EDIT = "memory_file/{fileName}/{isGlobal}"
     const val PERMISSIONS = "permissions"
     /**
@@ -217,6 +226,27 @@ object Routes {
     fun sessionStorageDetail(sessionId: String) = "session_storage/$sessionId"
     fun memoryFileEdit(fileName: String, isGlobal: Boolean) = "memory_file/$fileName/$isGlobal"
     fun chat(sessionId: String) = "chat/$sessionId"
+
+    /**
+     * [T-tavern-ai] Chat route for a fresh draft that starts in tavern
+     * mode: the picked library ids ride along as query arguments and
+     * the chat screen consumes them once to bind the snapshot.
+     */
+    fun chatWithTavern(
+        sessionId: String,
+        characterId: String,
+        userRoleId: String? = null,
+        worldBookId: String? = null,
+    ): String {
+        fun enc(v: String) = java.net.URLEncoder.encode(v, "UTF-8").replace("+", "%20")
+        val params = buildList {
+            add("tavernChar=${enc(characterId)}")
+            if (userRoleId != null) add("tavernRole=${enc(userRoleId)}")
+            if (worldBookId != null) add("tavernBook=${enc(worldBookId)}")
+        }
+        return "chat/$sessionId?${params.joinToString("&")}"
+    }
+
     fun providerDetail(instanceId: String) = "provider/$instanceId"
     fun shadowVoiceDetail(instanceId: String) = "voice_service/$instanceId"
     fun modelGroupDetail(groupId: String) = "model_group/$groupId"
@@ -596,7 +626,27 @@ fun AppNavigation(
 
         composable(
             route = Routes.CHAT,
-            arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
+            arguments = listOf(
+                navArgument("sessionId") { type = NavType.StringType },
+                // [T-tavern-ai] Optional tavern picks for a fresh draft;
+                // nullable + defaulted so plain `chat/<id>` links (every
+                // existing caller) keep matching unchanged.
+                navArgument("tavernChar") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("tavernRole") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+                navArgument("tavernBook") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
         ) { backStackEntry ->
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
             ChatSplitScaffoldRoute(
@@ -607,6 +657,9 @@ fun AppNavigation(
                 memoryRepository = memoryRepository,
                 skillRepository = skillRepository,
                 mcpRepository = mcpRepository,
+                initialTavernCharId = backStackEntry.arguments?.getString("tavernChar"),
+                initialTavernRoleId = backStackEntry.arguments?.getString("tavernRole"),
+                initialTavernBookId = backStackEntry.arguments?.getString("tavernBook"),
             )
         }
 
@@ -1372,6 +1425,16 @@ fun AppNavigation(
         // [T-tavern-mode] Tavern library management.
         composable(Routes.TAVERN_LIBRARY) {
             com.lowhub.app.ui.settings.TavernLibraryScreen(
+                providerRepository = providerRepository,
+                onBack = { navController.safePopBackStack() },
+                onAiCreateClick = { navController.safeNavigate(Routes.TAVERN_AI_CREATE) },
+            )
+        }
+
+        // [T-tavern-ai] Co-create a character card by chatting with the AI.
+        composable(Routes.TAVERN_AI_CREATE) {
+            com.lowhub.app.ui.settings.TavernAiCreateScreen(
+                providerRepository = providerRepository,
                 onBack = { navController.safePopBackStack() },
             )
         }

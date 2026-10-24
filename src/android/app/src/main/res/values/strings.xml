@@ -2364,4 +2364,23 @@
     <string name="tavern_mode_action">Tavern Mode</string>
     <string name="tavern_settings_action">Tavern Settings</string>
     <string name="tavern_disable_action">Turn off Tavern Mode</string>
+    <string name="tavern_field_example_dialogue">Example dialogue</string>
+    <string name="tavern_field_tags">Tags (comma separated)</string>
+    <string name="tavern_entry_order">Priority (higher injects first)</string>
+    <string name="tavern_ai_complete">AI complete</string>
+    <string name="tavern_ai_working">AI is working…</string>
+    <string name="tavern_ai_failed">AI request failed. Check that a model is configured, then try again.</string>
+    <string name="tavern_ai_theme_label">Entry theme</string>
+    <string name="tavern_ai_generate_entries">AI generate entries</string>
+    <string name="tavern_ai_create_entry">Create with AI chat</string>
+    <string name="tavern_ai_create_title">Create Character with AI</string>
+    <string name="tavern_ai_create_intro">Tell me your inspiration for a character — a name, a vibe, a setting, anything. I will ask a few questions to fill in the gaps, then you can turn our chat into a character card.</string>
+    <string name="tavern_ai_create_input_hint">Describe your inspiration…</string>
+    <string name="tavern_ai_create_send">Send</string>
+    <string name="tavern_ai_create_generate">Generate character card</string>
+    <string name="new_chat_mode_title">New Chat</string>
+    <string name="new_chat_mode_normal">Normal chat</string>
+    <string name="new_chat_mode_normal_sub">A regular conversation</string>
+    <string name="new_chat_mode_tavern">Tavern mode</string>
+    <string name="new_chat_mode_tavern_sub">Roleplay with a character card</string>
 </resources>

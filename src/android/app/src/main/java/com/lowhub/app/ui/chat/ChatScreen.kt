@@ -574,6 +574,17 @@ fun ChatScreen(
      *  the "Create" hand-off inside the tavern setup sheet when the
      *  library has no character cards yet. */
     onTavernLibraryClick: () -> Unit = {},
+    /**
+     * [T-tavern-ai] One-shot tavern picks for a FRESH draft, handed in
+     * by the scaffold (session-list mode chooser or the chat route's
+     * query arguments). When [pendingTavernCharId] is non-null the
+     * screen loads those library items once and binds their snapshot
+     * via [ChatViewModel.applyTavernConfig]. Null for every ordinary
+     * session open — existing chats are never affected.
+     */
+    pendingTavernCharId: String? = null,
+    pendingTavernRoleId: String? = null,
+    pendingTavernBookId: String? = null,
 ) {
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -623,6 +634,34 @@ fun ChatScreen(
     // [T-tavern-mode] This session's tavern setup snapshot (null = normal
     // chat). Drives the overflow-menu items and the setup sheet's mode.
     val tavernConfig by viewModel.tavernConfig.collectAsState()
+    // [T-tavern-ai] Consume the one-shot tavern picks handed in for a
+    // fresh draft: load the library items by id on IO, snapshot them
+    // onto this session through the same apply path the setup sheet
+    // uses. Guarded to run once per session id; a character deleted
+    // between picking and opening voids the whole selection and the
+    // chat just opens normally.
+    var tavernPicksConsumed by remember(sessionId) { mutableStateOf(false) }
+    LaunchedEffect(sessionId, pendingTavernCharId) {
+        val charId = pendingTavernCharId ?: return@LaunchedEffect
+        if (tavernPicksConsumed || !sessionId.startsWith("__new__")) {
+            return@LaunchedEffect
+        }
+        tavernPicksConsumed = true
+        val config = withContext(Dispatchers.IO) {
+            val character = com.lowhub.app.agent.TavernStore
+                .loadCharacter(context, charId) ?: return@withContext null
+            com.lowhub.app.agent.TavernSessionConfig(
+                character = character,
+                userRole = pendingTavernRoleId?.let {
+                    com.lowhub.app.agent.TavernStore.loadUserRole(context, it)
+                },
+                worldBook = pendingTavernBookId?.let {
+                    com.lowhub.app.agent.TavernStore.loadWorldBook(context, it)
+                },
+            )
+        } ?: return@LaunchedEffect
+        viewModel.applyTavernConfig(config)
+    }
     val attachments by viewModel.attachments.collectAsState()
     // [T-android-paste-placeholder] Folded pastes, rendered as chips above the
     // attachment row.
