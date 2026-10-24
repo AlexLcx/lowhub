@@ -406,8 +406,10 @@ internal fun AttachmentChip(
 
 // [T-composer-compact-buttons] Composer buttons shrunk ~15% (38dp → 32dp,
 // icons 20dp → 18dp) so the tool row leaves more room for the text field.
-// 32dp is the floor here: these Boxes are visual == tap target in one, so
-// they do not go below it. This component is only used inside the composer.
+// [T-composer-redesign] The row has since lost the persona button (moved
+// to the top bar), the thinking capsule and the mic entry, so with the
+// extra room the circle is back up to 36dp with 20dp icons. This
+// component is only used inside the composer.
 @Composable
 internal fun InputCircleButton(
     onClick: () -> Unit,
@@ -415,7 +417,7 @@ internal fun InputCircleButton(
 ) {
     Box(
         modifier = Modifier
-            .size(32.dp)
+            .size(36.dp)
             .background(ChatColors.inputIconBg, CircleShape)
             .border(0.5.dp, ChatColors.inputIconBorder, CircleShape)
             .clip(CircleShape)

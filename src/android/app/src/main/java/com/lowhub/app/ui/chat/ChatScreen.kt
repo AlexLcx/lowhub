@@ -3275,6 +3275,22 @@ fun ChatScreen(
                 },
                 actions = {
                     // iOS: "..." circle button → dropdown menu
+                    // [T-composer-redesign] Persona switch moved up from
+                    // the composer row: shows the active persona's glyph
+                    // and opens the SAME picker sheet as the ⋮ menu's
+                    // "Switch persona" entry below (shared
+                    // showPersonaPicker state — no second sheet or state).
+                    val topBarPersonaMeta by com.lowhub.app.agent.SoulStore
+                        .cachedMetadata.collectAsState()
+                    IconButton(
+                        onClick = { showPersonaPicker = true },
+                    ) {
+                        SoulIconGlyph(
+                            icon = topBarPersonaMeta.icon,
+                            sizeDp = 20.dp,
+                            emojiSp = 17.sp,
+                        )
+                    }
                     Box {
                         IconButton(onClick = { showChatMenu = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More")
@@ -6239,28 +6255,6 @@ fun ChatScreen(
                     val recIsRecording = recSttState == com.lowhub.app.speech.RecognitionState.RECORDING ||
                         recSttState == com.lowhub.app.speech.RecognitionState.STARTING ||
                         recSttState == com.lowhub.app.speech.RecognitionState.FINISHING
-                    // [T-composer-thinking] Thinking level surfaced in the
-                    // composer tool row (capsule + expandable picker below).
-                    // SAME source as the slash-command row: the ViewModel's
-                    // thinkingLevel flow / setThinkingLevel — no second
-                    // state holder, so both entry points always agree.
-                    val composerThinkingLevel by viewModel.thinkingLevel.collectAsState()
-                    val composerThinkingSupported = viewModel.currentModelSupportsReasoning
-                    var showThinkingPicker by remember { mutableStateOf(false) }
-                    if (showThinkingPicker && composerThinkingSupported) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.End,
-                        ) {
-                            ThinkingLevelPicker(
-                                current = composerThinkingLevel,
-                                availableLevels = viewModel.availableThinkingLevels,
-                                onSelect = { viewModel.setThinkingLevel(it) },
-                            )
-                        }
-                    }
                     // [T-android-voice-panel] Inline voice mode replaces the text
                     // field with the panel (mirrors iOS inputFieldOrWaveform →
                     // InlineVoiceInputView). The legacy in-composer waveform
@@ -6877,7 +6871,11 @@ fun ChatScreen(
                             // T185: 12dp horizontal lines the +/slash and
                             // mic/send icon-button column up with the
                             // attachment row + textfield + Move-to popup.
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                            // [T-composer-redesign] 16dp horizontal now
+                            // that the row holds fewer, larger buttons
+                            // (persona moved to the top bar; thinking
+                            // capsule and mic entry removed).
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         // Left: + button (iOS: 34×34 circle, secondary bg)
@@ -6889,8 +6887,9 @@ fun ChatScreen(
                                     Icons.Default.Add,
                                     contentDescription = "Attach",
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    // [T-composer-compact-buttons] 20dp → 18dp.
-                                    modifier = Modifier.size(18.dp),
+                                    // [T-composer-redesign] 20dp (was 18dp in
+                                    // the compact-buttons pass).
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                             MinisMenu(
@@ -6939,24 +6938,7 @@ fun ChatScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.width(8.dp))
-
-                        // [T-composer-persona] Quick persona switch next to
-                        // the attach button: shows the active persona's glyph
-                        // and opens the SAME picker sheet as the ⋮ menu's
-                        // "Switch persona" entry (shared showPersonaPicker
-                        // state — no second sheet or state).
-                        val composerSoulMeta by com.lowhub.app.agent.SoulStore
-                            .cachedMetadata.collectAsState()
-                        InputCircleButton(onClick = { showPersonaPicker = true }) {
-                            SoulIconGlyph(
-                                icon = composerSoulMeta.icon,
-                                sizeDp = 18.dp,
-                                emojiSp = 15.sp,
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         // Left: "/" slash command button (iOS: italic /, bold)
                         InputCircleButton(onClick = {
@@ -6968,61 +6950,24 @@ fun ChatScreen(
                         }) {
                             Text(
                                 "/",
-                                // [T-composer-compact-buttons] 20sp → 18sp.
-                                fontSize = 18.sp,
+                                // [T-composer-redesign] 20sp (was 18sp in
+                                // the compact-buttons pass).
+                                fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontStyle = FontStyle.Italic,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
 
-                        // [T-composer-thinking] Thinking-level capsule: shows
-                        // the current level (localized name, same label the
-                        // picker pills use); tapping toggles the full picker
-                        // row above the composer. Hidden entirely when the
-                        // current model offers no reasoning levels — same
-                        // gating as the slash-command row.
-                        if (composerThinkingSupported) {
-                            Spacer(modifier = Modifier.width(8.dp))
-                            val thinkingTint = if (composerThinkingLevel.isEnabled) {
-                                ChatColors.thinking
-                            } else {
-                                ChatColors.secondaryText
-                            }
-                            Row(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(ChatColors.secondaryText.copy(alpha = 0.12f))
-                                    .clickable { showThinkingPicker = !showThinkingPicker }
-                                    .padding(horizontal = 10.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Psychology,
-                                    contentDescription = null,
-                                    tint = thinkingTint,
-                                    modifier = Modifier.size(15.dp),
-                                )
-                                Spacer(modifier = Modifier.width(5.dp))
-                                Text(
-                                    text = composerThinkingLevel.localizedName(context),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = thinkingTint,
-                                )
-                            }
-                        }
-
-                        // [T-writing-controls] Writing-controls capsule,
-                        // right after the thinking capsule: AutoStories
-                        // icon + the effective length (tier name, or the
+                        // [T-writing-controls] Writing-controls capsule:
+                        // AutoStories icon + the effective length (tier
+                        // name, or the
                         // custom "N千字" in novel mode). Tapping opens
                         // the writing settings sheet. Highlighted when
                         // this session's writing settings differ from
                         // DEFAULT, or in a tavern session (novel craft
-                        // always applies there). Same capsule geometry
-                        // as the thinking capsule.
-                        Spacer(modifier = Modifier.width(8.dp))
+                        // always applies there).
+                        Spacer(modifier = Modifier.width(12.dp))
                         val composerWriting by viewModel.writingSettings.collectAsState()
                         val composerTavern by viewModel.tavernConfig.collectAsState()
                         val writingActive = composerTavern != null ||
@@ -7053,16 +6998,16 @@ fun ChatScreen(
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(ChatColors.secondaryText.copy(alpha = 0.12f))
                                 .clickable { showWritingSettings = true }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                .padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Icon(
                                 Icons.Outlined.AutoStories,
                                 contentDescription = null,
                                 tint = writingTint,
-                                modifier = Modifier.size(15.dp),
+                                modifier = Modifier.size(16.dp),
                             )
-                            Spacer(modifier = Modifier.width(5.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = writingLabel,
                                 fontSize = 12.sp,
@@ -7077,7 +7022,7 @@ fun ChatScreen(
                         // AIChatView.swift L1586 editExitButton.
                         val editingId by viewModel.editingMessageId.collectAsState()
                         if (editingId != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
                             Surface(
                                 shape = RoundedCornerShape(16.dp),
                                 color = ChatColors.inputBg,
@@ -7097,46 +7042,8 @@ fun ChatScreen(
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Right: Mic button — only renders when a speech engine
-                        // is actually available on this device (handles the
-                        // AOSP / HarmonyOS / GMS-free case).
-                        val sttAvailable by com.lowhub.app.speech.SpeechRecognitionManager
-                            .isAvailable.collectAsState()
                         val sttState by com.lowhub.app.speech.SpeechRecognitionManager
                             .state.collectAsState()
-                        val sttLocale by com.lowhub.app.speech.SpeechRecognitionManager
-                            .locale.collectAsState()
-                        var showLangSheet by remember { mutableStateOf(false) }
-                        // While recording, a tappable 2-letter language pill
-                        // appears to the left of the mic button. Outside a
-                        // session the mic button's own badge stays hidden and
-                        // the pill is not rendered — matches iOS.
-                        if (sttAvailable && !com.lowhub.app.ui.chat.voice.VoiceModePrefs.isVoiceActive &&
-                            (sttState == com.lowhub.app.speech.RecognitionState.RECORDING ||
-                                sttState == com.lowhub.app.speech.RecognitionState.STARTING)
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    // [T-composer-compact-buttons] 38dp → 32dp.
-                                    .size(32.dp)
-                                    .background(ChatColors.inputIconBg, CircleShape)
-                                    .border(0.5.dp, ChatColors.inputIconBorder, CircleShape)
-                                    .clip(CircleShape)
-                                    .clickable { showLangSheet = true },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = sttLocale.language.uppercase().take(2),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = ChatColors.primaryText,
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(6.dp))
-                        }
-                        if (showLangSheet) {
-                            SpeechLanguagePickerSheet(onDismiss = { showLangSheet = false })
-                        }
                         // Extracted so the app-icon "voice chat" quick action
                         // (DeepLinkCoordinator.ChatAction.START_VOICE) can
                         // fire the same flow on first compose without
@@ -7483,34 +7390,7 @@ fun ChatScreen(
                             Spacer(modifier = Modifier.weight(1f))
                         }
 
-                        // [T-android-voice-entry-always-available] The voice /
-                        // keyboard toggle is ALWAYS shown. It used to be gated on
-                        // `sttAvailable`, a runtime probe — so when the active
-                        // engine degraded mid-session the button disappeared while
-                        // `isVoiceActive` stayed true, leaving the user inside the
-                        // voice panel with no way back to the keyboard (the toggle
-                        // IS this button). Gating an escape hatch on the health of
-                        // the thing you're escaping from is the bug.
-                        //
-                        // Existence now depends only on a structural fact —
-                        // microphone hardware. "No speech service", "engine
-                        // degraded" and "no ASR provider configured" are all
-                        // RECOVERABLE states, explained inside the panel with a
-                        // link to the relevant settings rather than by silently
-                        // removing the control.
-                        if (com.lowhub.app.speech.SpeechRecognitionManager.hasMicrophoneHardware) {
-                            MicButton(
-                                isRecording = !com.lowhub.app.ui.chat.voice.VoiceModePrefs.isVoiceActive &&
-                                    (sttState == com.lowhub.app.speech.RecognitionState.RECORDING ||
-                                        sttState == com.lowhub.app.speech.RecognitionState.STARTING),
-                                localeBadge = null,
-                                onClick = { triggerVoiceInput() },
-                                onLongClick = { showLangSheet = true },
-                                isVoiceActive = com.lowhub.app.ui.chat.voice.VoiceModePrefs.isVoiceActive,
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
 
                         // Right: 3-state Send / Enqueue / Stop button (mirrors iOS sendButton).
                         //   • streaming + hasText  → SEND (routes through viewModel.sendMessage,
@@ -7555,8 +7435,9 @@ fun ChatScreen(
                         if (showStop) {
                             Box(
                                 modifier = Modifier
-                                    // [T-composer-compact-buttons] 38dp → 32dp, icon 20dp → 18dp.
-                                    .size(32.dp)
+                                    // [T-composer-redesign] 36dp, icon 20dp
+                                    // (was 32dp / 18dp in the compact pass).
+                                    .size(36.dp)
                                     .background(Color(0xFFFF3B30), CircleShape)
                                     .clip(CircleShape)
                                     .clickable { viewModel.cancelStream() },
@@ -7566,7 +7447,7 @@ fun ChatScreen(
                                     Icons.Default.Stop,
                                     contentDescription = "Stop",
                                     tint = Color.White,
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         } else {
