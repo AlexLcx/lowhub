@@ -948,6 +948,9 @@ fun ChatSplitScaffoldRoute(
                 },
                 onModelGroupsClick = { navController.safeNavigate(Routes.MODEL_GROUPS) },
                 onEditProviderClick = { id -> navController.safeNavigate(Routes.providerDetail(id)) },
+                // [T-tavern-mode] Setup sheet's "Create" hand-off when the
+                // tavern library has no character cards yet.
+                onTavernLibraryClick = { navController.safeNavigate(Routes.TAVERN_LIBRARY) },
             )
         },
     )

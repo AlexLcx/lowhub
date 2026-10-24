@@ -177,6 +177,8 @@ object Routes {
     const val MCP = "mcp"
     /** [T-soul-md] SOUL.md editor. */
     const val SOUL = "soul"
+    /** [T-tavern-mode] Tavern library (character cards / user roles / world books). */
+    const val TAVERN_LIBRARY = "tavern_library"
     const val MEMORY_FILE_EDIT = "memory_file/{fileName}/{isGlobal}"
     const val PERMISSIONS = "permissions"
     /**
@@ -623,6 +625,7 @@ fun AppNavigation(
                 onAgentToolsClick = { navController.safeNavigate(Routes.AGENT_TOOLS) },
                 onMcpClick = { navController.safeNavigate(Routes.MCP) },
                 onSoulClick = { navController.safeNavigate(Routes.SOUL) },
+                onTavernClick = { navController.safeNavigate(Routes.TAVERN_LIBRARY) },
                 onPermissionsClick = { navController.safeNavigate(Routes.PERMISSIONS) },
                 onUsageClick = { navController.safeNavigate(Routes.USAGE_STATS) },
                 onAppearanceClick = { navController.safeNavigate(Routes.APPEARANCE) },
@@ -1362,6 +1365,13 @@ fun AppNavigation(
         // [T-soul-md] SOUL.md editor.
         composable(Routes.SOUL) {
             com.lowhub.app.ui.settings.SoulSettingsScreen(
+                onBack = { navController.safePopBackStack() },
+            )
+        }
+
+        // [T-tavern-mode] Tavern library management.
+        composable(Routes.TAVERN_LIBRARY) {
+            com.lowhub.app.ui.settings.TavernLibraryScreen(
                 onBack = { navController.safePopBackStack() },
             )
         }

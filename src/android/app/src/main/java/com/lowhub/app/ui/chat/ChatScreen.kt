@@ -158,6 +158,7 @@ import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Handyman
 import androidx.compose.material.icons.outlined.Extension
 import androidx.compose.material.icons.outlined.Face
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.Terminal
@@ -569,6 +570,10 @@ fun ChatScreen(
     /** [T-android-picker-provider-edit] Open one provider instance's settings —
      *  wired to the edit button on each provider section of the model picker. */
     onEditProviderClick: (instanceId: String) -> Unit = {},
+    /** [T-tavern-mode] Open the Tavern Library settings screen — wired to
+     *  the "Create" hand-off inside the tavern setup sheet when the
+     *  library has no character cards yet. */
+    onTavernLibraryClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -615,6 +620,9 @@ fun ChatScreen(
     val modelName by viewModel.modelName.collectAsState()
     val sessionTitle by viewModel.sessionTitle.collectAsState()
     val sessionCategory by viewModel.sessionCategory.collectAsState()
+    // [T-tavern-mode] This session's tavern setup snapshot (null = normal
+    // chat). Drives the overflow-menu items and the setup sheet's mode.
+    val tavernConfig by viewModel.tavernConfig.collectAsState()
     val attachments by viewModel.attachments.collectAsState()
     // [T-android-paste-placeholder] Folded pastes, rendered as chips above the
     // attachment row.
@@ -902,6 +910,9 @@ fun ChatScreen(
     // [T-multi-persona] Persona picker sheet visibility (overflow menu →
     // "Switch Persona"). Mirrors showModelPicker's hoisted-state pattern.
     var showPersonaPicker by remember { mutableStateOf(false) }
+    // [T-tavern-mode] Tavern setup sheet visibility (overflow menu →
+    // "Tavern Mode" / "Tavern Settings").
+    var showTavernSetup by remember { mutableStateOf(false) }
     // [T-android-picker-provider-edit] Reopen the picker after a hand-off to
     // a provider's settings or Model Groups (iOS shows those over the picker).
     val reopenModelPickerOnResume = com.lowhub.app.ui.components.rememberReopenOnResume {
@@ -3359,6 +3370,45 @@ fun ChatScreen(
                                     MenuItemIcon(Icons.Outlined.Face)
                                 },
                             )
+                            // [T-tavern-mode] Tavern (roleplay) entry:
+                            // with a setup bound, the menu edits or turns
+                            // it off; without one it only offers to START
+                            // tavern mode on a still-empty chat (draft or
+                            // no messages) — an opening line can't be
+                            // retro-inserted into a running conversation.
+                            if (tavernConfig != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.tavern_settings_action)) },
+                                    onClick = {
+                                        showChatMenu = false
+                                        showTavernSetup = true
+                                    },
+                                    leadingIcon = {
+                                        MenuItemIcon(Icons.Outlined.MenuBook)
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.tavern_disable_action)) },
+                                    onClick = {
+                                        showChatMenu = false
+                                        viewModel.clearTavernConfig()
+                                    },
+                                    leadingIcon = {
+                                        MenuItemIcon(Icons.Outlined.MenuBook)
+                                    },
+                                )
+                            } else if (messages.isEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.tavern_mode_action)) },
+                                    onClick = {
+                                        showChatMenu = false
+                                        showTavernSetup = true
+                                    },
+                                    leadingIcon = {
+                                        MenuItemIcon(Icons.Outlined.MenuBook)
+                                    },
+                                )
+                            }
                             MinisMenuDivider()
                             // Token Usage (iOS parity)
                             DropdownMenuItem(
@@ -7696,6 +7746,31 @@ fun ChatScreen(
         ChatPersonaPickerSheet(
             onDismiss = { showPersonaPicker = false },
             onSelected = { showPersonaPicker = false },
+        )
+    }
+
+    // [T-tavern-mode] Tavern setup bottom sheet (start or edit mode,
+    // keyed off whether this session already has a tavern snapshot).
+    if (showTavernSetup) {
+        TavernSetupSheet(
+            initialConfig = tavernConfig,
+            onDismiss = { showTavernSetup = false },
+            onConfirm = { config ->
+                viewModel.applyTavernConfig(config)
+                showTavernSetup = false
+            },
+            onDisableTavern = if (tavernConfig != null) {
+                {
+                    viewModel.clearTavernConfig()
+                    showTavernSetup = false
+                }
+            } else {
+                null
+            },
+            onCreateLibraryItem = {
+                showTavernSetup = false
+                onTavernLibraryClick()
+            },
         )
     }
 

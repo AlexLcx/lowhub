@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AutoAwesome
+import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.BatteryFull
 import androidx.compose.material.icons.outlined.BugReport
@@ -94,6 +95,9 @@ fun SettingsScreen(
     // Agent Runtime section; default no-op for callers that haven't wired
     // the route yet.
     onSoulClick: () -> Unit = {},
+    // [T-tavern-mode] Tavern Library page, listed directly below Soul in
+    // the Agent Runtime section; default no-op for unwired callers.
+    onTavernClick: () -> Unit = {},
     onPermissionsClick: () -> Unit = {},
     onUsageClick: () -> Unit = {},
     onAppearanceClick: () -> Unit = {},
@@ -218,6 +222,15 @@ fun SettingsScreen(
                     title = stringResource(R.string.settings_soul),
                     subtitle = stringResource(R.string.settings_soul_subtitle),
                     onClick = onSoulClick,
+                )
+                // [T-tavern-mode] Tavern Library — roleplay character
+                // cards / user roles / world books, right below Soul.
+                SettingsItem(
+                    icon = Icons.Outlined.MenuBook,
+                    iconColor = Color(0xFFAF52DE),
+                    title = stringResource(R.string.tavern_settings_entry),
+                    subtitle = stringResource(R.string.tavern_settings_entry_subtitle),
+                    onClick = onTavernClick,
                 )
                 SettingsItem(
                     icon = Icons.Outlined.Psychology,

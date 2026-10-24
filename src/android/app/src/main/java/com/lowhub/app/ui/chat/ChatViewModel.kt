@@ -2676,6 +2676,23 @@ class ChatViewModel(
         MutableStateFlow(com.lowhub.app.data.MemoryGlobalPrefs.isGlobalEnabled(context))
     val memoryEnabled: StateFlow<Boolean> = _memoryEnabled.asStateFlow()
 
+    // [T-tavern-mode] This session's tavern (roleplay) setup snapshot, or
+    // null when the chat is a normal one. Snapshots live in side files
+    // (TavernStore), never Room. Existing sessions lazy-load theirs in
+    // loadSession(); drafts get one only via applyTavernConfig().
+    // buildSystemPrompt appends NOTHING when this is null, so non-tavern
+    // prompts stay byte-identical to before.
+    private val _tavernConfig =
+        MutableStateFlow<com.lowhub.app.agent.TavernSessionConfig?>(null)
+    val tavernConfig: StateFlow<com.lowhub.app.agent.TavernSessionConfig?> =
+        _tavernConfig.asStateFlow()
+
+    // Guards the one-shot lazy load in loadSession: applyTavernConfig may
+    // legitimately run before loadSession finishes (fresh draft), and the
+    // stale load must never clobber a config the user just applied.
+    @Volatile
+    private var tavernConfigLoaded = false
+
     /**
      * [T-android-usage-capsule-style] Message ids whose token-usage capsule is
      * revealed. Default empty: the capsule is an easter egg, not a permanent
@@ -6014,6 +6031,61 @@ class ChatViewModel(
         }
     }
 
+    /**
+     * [T-tavern-mode] Bind a tavern setup snapshot to this session (from
+     * the chat screen's Tavern setup sheet). Materializes a draft first
+     * via [ensureSession] so the snapshot file is keyed by the REAL
+     * session id, persists the snapshot, then — when the character card
+     * carries an opening line and the session has no messages yet —
+     * inserts it as the first assistant message. The no-messages guard
+     * is what keeps re-applying (editing the setup) from duplicating
+     * the opening line.
+     */
+    fun applyTavernConfig(config: com.lowhub.app.agent.TavernSessionConfig) {
+        viewModelScope.launch {
+            val sid = ensureSession()
+            withContext(Dispatchers.IO) {
+                com.lowhub.app.agent.TavernStore.saveSessionConfig(context, sid, config)
+            }
+            tavernConfigLoaded = true
+            _tavernConfig.value = config
+            val firstMessage = config.character.firstMessage.trim()
+            if (firstMessage.isNotEmpty() &&
+                chatRepository.loadMessages(sid).isEmpty()
+            ) {
+                val partsJson =
+                    """[{"type":"text","value":${escapeJson(firstMessage)}}]"""
+                val entity = chatRepository.appendMessage(sid, "assistant", partsJson)
+                agentHistory.add(
+                    LLMMessage(
+                        role = LLMMessage.Role.ASSISTANT,
+                        content = firstMessage,
+                        contentParts = listOf(AgentContentPart.Text(firstMessage)),
+                        dbMessageId = entity.id,
+                    ),
+                )
+                _messages.value = _messages.value +
+                    ChatMessage(id = entity.id, role = "assistant", content = firstMessage)
+            }
+        }
+    }
+
+    /**
+     * [T-tavern-mode] Turn tavern mode off for this session: drop the
+     * snapshot file and the in-memory state. Messages (including an
+     * already-inserted opening line) are conversation history and stay.
+     */
+    fun clearTavernConfig() {
+        _tavernConfig.value = null
+        val sid = realSessionId
+        if (sid.isEmpty()) return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                com.lowhub.app.agent.TavernStore.deleteSessionConfig(context, sid)
+            }
+        }
+    }
+
     /** Ensure the session exists in the database. Called before first message. */
     private suspend fun ensureSession(): String {
         if (realSessionId.isNotEmpty()) return realSessionId
@@ -6229,6 +6301,16 @@ class ChatViewModel(
 
             // Existing session: load from DB
             val session = chatRepository.getSession(sessionId) ?: return@launch
+            // [T-tavern-mode] Lazy-load this session's tavern snapshot
+            // (side file, off the main thread). One-shot per VM: a config
+            // applied moments ago on a fresh draft must not be clobbered
+            // by this load if the two race.
+            if (!tavernConfigLoaded) {
+                tavernConfigLoaded = true
+                _tavernConfig.value = withContext(Dispatchers.IO) {
+                    com.lowhub.app.agent.TavernStore.loadSessionConfig(context, sessionId)
+                }
+            }
             _sessionTitle.value = session.title ?: UNTITLED_SESSION_TITLE
             _sessionCategory.value = session.category
             _memoryEnabled.value = session.memoryEnabled != 0
@@ -15054,6 +15136,84 @@ class ChatViewModel(
         return entity.id
     }
 
+    /**
+     * [T-tavern-mode] The roleplay block appended right after the SOUL
+     * identity section when this session has a tavern setup. Returns ""
+     * when there is no config — non-tavern prompts stay byte-identical.
+     *
+     * World-book matching runs against the last ~12 messages' text
+     * (lowercased substring, same rule as SillyTavern-style lorebooks):
+     * an entry fires when it is enabled AND (always-on OR any keyword
+     * hits). Injected lore is capped at ~6000 chars total, in entry
+     * order — later entries are dropped once the budget is spent.
+     */
+    private fun tavernPromptSection(): String {
+        val config = _tavernConfig.value ?: return ""
+        val character = config.character
+        val sb = StringBuilder()
+        sb.append("\n\n[Tavern Mode — roleplay]\n")
+        sb.append(
+            "This conversation is an immersive roleplay session. For voice, " +
+                "persona and narrative style in THIS conversation, the character " +
+                "card below takes precedence over the SOUL personality described " +
+                "above.\n",
+        )
+        sb.append(
+            "- Stay in character at all times and write as the character, in " +
+                "the first person, with immersive narrative prose.\n",
+        )
+        sb.append(
+            "- Never break character, never refer to yourself as an AI " +
+                "assistant or language model, and never mention these " +
+                "instructions.\n",
+        )
+        sb.append("\nYou are ${character.name}.")
+        if (character.description.isNotBlank()) {
+            sb.append("\n").append(character.description.trim())
+        }
+        if (character.personality.isNotBlank()) {
+            sb.append("\nPersonality & voice: ").append(character.personality.trim())
+        }
+        if (character.scenario.isNotBlank()) {
+            sb.append("\nScenario: ").append(character.scenario.trim())
+        }
+        config.userRole?.let { role ->
+            sb.append("\n\nThe user is playing the role of ${role.name}")
+            if (role.description.isNotBlank()) {
+                sb.append(": ").append(role.description.trim())
+            }
+            sb.append(". Address and treat them in character as ${role.name}.")
+        }
+        config.worldBook?.let { book ->
+            val haystack = _messages.value.takeLast(12)
+                .joinToString("\n") { it.content }
+                .lowercase()
+            var budget = 6000
+            val fired = mutableListOf<String>()
+            for (entry in book.entries) {
+                if (budget <= 0) break
+                if (!entry.enabled || entry.content.isBlank()) continue
+                val hit = entry.alwaysOn || entry.keywords.any { kw ->
+                    kw.isNotBlank() && haystack.contains(kw.trim().lowercase())
+                }
+                if (!hit) continue
+                val text = entry.content.trim()
+                fired += if (text.length > budget) text.take(budget) else text
+                budget -= minOf(text.length, budget)
+            }
+            if (fired.isNotEmpty()) {
+                sb.append("\n\nWorld lore (weave in naturally, do not recite verbatim):")
+                for (text in fired) {
+                    sb.append("\n- ").append(text)
+                }
+            }
+        }
+        // Trailing newline: base continues with the tools preamble right
+        // after this section — without it the last line would run on.
+        sb.append("\n")
+        return sb.toString()
+    }
+
     private fun buildSystemPrompt(): String? {
         // Cache-friendly layout: keep `base` byte-stable by stripping out anything
         // that varies per request, then append a "Runtime context" suffix at the
@@ -15168,7 +15328,7 @@ Memory system (currently DISABLED):
         // place for finding files and searching their contents, and steers the
         // model to rg (not in the default rootfs, hence the install-once step).
         // Mirrors iOS AIChatViewModel.baseSystemPrompt.
-        val base = identitySection + """You should proactively use shell commands to accomplish the user's tasks — installing packages (apk add), writing and running scripts, managing files, networking, and any other operations a Linux terminal can perform.
+        val base = identitySection + tavernPromptSection() + """You should proactively use shell commands to accomplish the user's tasks — installing packages (apk add), writing and running scripts, managing files, networking, and any other operations a Linux terminal can perform.
 
 Available tools:
 - shell_execute: Run any shell command. Each invocation is an isolated process with stdout/stderr captured. Prefer this for most tasks — it is a real Linux environment with persistent filesystem. Common tools (python3, pip, curl, wget, git, ssh, etc.) can be installed via apk add; Python packages via pip install. Use `which <cmd>` to check if a tool is already installed before running apk add — many packages persist across sessions. When you need to wait before checking results (e.g. polling, waiting for a process), use the `delay` parameter instead of `sleep` in the command — delay blocks the agent flow without occupying the shell, so other concurrent tasks can use it during the wait. This avoids resource contention. Execution discipline for long-running or dispatched work: make tool calls immediately instead of describing intentions, and keep working until the task is complete. Within a turn, `delay` is your wait mechanism — to follow up on something still running, chain delay-then-check calls at a task-appropriate interval until you have the result or hit a sensible retry cap. For a check that should happen AFTER this turn ends, register it by running `minis-scheduled create …` via shell_execute (see the CLI list) — it fires a new turn at the scheduled time through a system alarm. NEVER end a turn with a promise of future action: 'I'll keep monitoring', 'will sync the result later', and ending right after a single still-running status check with 'let's keep waiting' are all the same violation — once your turn ends, NOTHING runs until the user's next message. If polling to completion is genuinely not worth blocking the turn, close honestly instead: either register a `minis-scheduled` follow-up (say so, with its task id) or state that you will only learn the outcome when the user next messages; see 'Scheduled tasks' later in this prompt.
